@@ -1,0 +1,91 @@
+REPORT zchaithur_mvc_design_1.
+DATA: l_vbeln TYPE vbap-vbeln.
+PARAMETERS: p_plant TYPE vbap-werks.
+SELECT-OPTIONS:  s_vbeln FOR l_vbeln.
+CLASS cl_sel DEFINITION.
+  PUBLIC SECTION.
+    TYPES: t_doc TYPE RANGE OF VBELN_VA.
+    DATA: s_doc   TYPE t_doc,
+          s_plant TYPE werks_ext.
+    METHODS: get_screen IMPORTING lp_werks TYPE werks_ext
+                                  ls_vbeln TYPE t_doc.
+
+
+ENDCLASS.
+CLASS cl_fetch DEFINITION.
+  PUBLIC SECTION.
+    DATA: lr_ref_sel TYPE REF TO cl_sel.
+    DATA: it_vbap TYPE STANDARD TABLE OF vbap.
+    METHODS: constructor IMPORTING io_sel_ref TYPE REF TO cl_sel,
+      fetch_data.
+ENDCLASS.
+
+CLASS cl_display DEFINITION.
+  PUBLIC SECTION.
+    DATA: lr_ref_fetch TYPE REF TO cl_fetch.
+
+    METHODS: constructor IMPORTING io_fetch_ref TYPE REF TO cl_fetch,
+      display.
+
+
+ENDCLASS.
+CLASS cl_sel IMPLEMENTATION.
+  METHOD get_screen.
+    me->s_doc = ls_vbeln.
+    me->s_plant = lp_werks.
+
+  ENDMETHOD.
+
+
+ENDCLASS.
+
+CLASS cl_fetch IMPLEMENTATION.
+  METHOD constructor.
+    lr_ref_sel = io_sel_ref.
+  ENDMETHOD.
+  METHOD fetch_data.
+    SELECT * FROM vbap INTO TABLE it_vbap WHERE vbeln IN me->lr_ref_sel->s_doc
+                                            AND werks = me->lr_ref_sel->s_plant.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS cl_display IMPLEMENTATION.
+
+  METHOD constructor.
+    lr_ref_fetch = io_fetch_ref.
+
+  ENDMETHOD.
+  METHOD display.
+    TRY .
+
+        CALL METHOD cl_salv_table=>factory
+*                        EXPORTING
+*                          list_display   = IF_SALV_C_BOOL_SAP=>FALSE
+*                          r_container    =
+*                          container_name =
+          IMPORTING
+            r_salv_table = DATA(lo_alv)
+          CHANGING
+            t_table      = me->lr_ref_fetch->it_vbap.
+
+
+      CATCH cx_salv_msg INTO DATA(lx_msg).
+        WRITE: lx_msg->get_longtext( ).
+
+    ENDTRY.
+    lo_alv->display( ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+
+  DATA(lo_sel) = NEW cl_sel( ).
+
+  DATA(lo_fetch) = NEW cl_fetch( io_sel_ref = lo_sel ).
+  DATA(lo_disp) = NEW cl_display( io_fetch_ref = lo_fetch ).
+
+  lo_sel->get_screen( lp_werks = p_plant
+                      ls_vbeln = s_vbeln[] ).
+  lo_fetch->fetch_data( ).
+  lo_disp->display( ).
