@@ -1,0 +1,77 @@
+
+INTERFACE tool.
+  METHODS: use_tool.
+ENDINTERFACE.
+CLASS lcl_person DEFINITION.
+  PUBLIC SECTION.
+
+
+
+    METHODS: constructor IMPORTING im_swiss_knife TYPE REF TO tool,
+      do_some_work.
+  PRIVATE SECTION.
+    DATA: swiss_knife TYPE REF TO tool.
+
+ENDCLASS.
+
+
+CLASS lcl_person IMPLEMENTATION.
+  METHOD constructor.
+    swiss_knife = im_swiss_knife.
+  ENDMETHOD.
+  METHOD do_some_work.
+
+    me->swiss_knife->use_tool( ).
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS lcl_nail_cut DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES tool.
+    ALIASES: use_tool FOR tool~use_tool.
+
+
+ENDCLASS.
+CLASS lcl_nail_cut IMPLEMENTATION.
+  METHOD use_tool.
+
+    WRITE: / 'Used to cut the nails'.
+
+  ENDMETHOD.
+
+
+ENDCLASS.
+CLASS lcl_cork_screw DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES tool.
+    ALIASES: use_tool FOR tool~use_tool.
+
+
+ENDCLASS.
+CLASS lcl_cork_screw IMPLEMENTATION.
+  METHOD use_tool.
+
+    WRITE: / 'Used to open the cork'.
+
+  ENDMETHOD.
+ENDCLASS.
+
+START-OF-SELECTION.
+
+  DATA: bartender      TYPE REF TO lcl_person,
+        bartender_tool TYPE REF TO tool.
+  DATA: lt_tab TYPE TABLE OF REF TO tool.
+
+  CREATE OBJECT bartender_tool TYPE lcl_nail_cut.
+  APPEND bartender_tool TO lt_tab.
+*  FREE OBJECT bartender_tool.
+  CREATE OBJECT bartender_tool TYPE lcl_cork_screw.
+  APPEND bartender_tool TO lt_tab.
+
+  LOOP AT lt_tab INTO DATA(lw_tab).
+    CREATE OBJECT bartender
+      EXPORTING
+        im_swiss_knife = lw_tab.
+    bartender->do_some_work( ).
+*    FREE OBJECT bartender.
+  ENDLOOP.
