@@ -1,0 +1,144 @@
+*&---------------------------------------------------------------------*
+*& Report ZCHAITHUR_DYNTAB_RTTS2
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zchaithur_dyntab_rtts2.
+
+
+CLASS cl_sel DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: get_screen IMPORTING im_tab   TYPE csequence
+                                  im_cols  TYPE csequence
+                                  im_where TYPE csequence.
+    DATA: tab   TYPE char30,
+          cols  TYPE string,
+          where TYPE string.
+ENDCLASS.
+CLASS cl_sel IMPLEMENTATION.
+
+  METHOD get_screen.
+    tab   = im_tab .
+    cols  =  im_cols .
+    where = im_where.
+
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS cl_fetch DEFINITION.
+
+  PUBLIC SECTION.
+
+    METHODS: constructor IMPORTING lo_cl_sel TYPE REF TO cl_sel,
+      fetch_data.
+    DATA: lo_cl_sel TYPE REF TO cl_sel.
+*    DATA: res_tab TYPE STANDARD TABLE.
+*    FIELD-SYMBOLS:<res_any> TYPE any TABLE.
+ENDCLASS.
+CLASS cl_display DEFINITION.
+  PUBLIC SECTION.
+
+    DATA: lo_ref_fetch TYPE REF TO cl_fetch.
+    METHODS: constructor IMPORTING lo_ref_fetch TYPE REF TO cl_fetch OPTIONAL,
+      display CHANGING VALUE(tab) TYPE table.
+
+ENDCLASS.
+CLASS cl_display IMPLEMENTATION.
+  METHOD constructor.
+    me->lo_ref_fetch = lo_ref_fetch.
+  ENDMETHOD.
+
+  METHOD display.
+    TRY.
+        CALL METHOD cl_salv_table=>factory
+*          EXPORTING
+*            list_display   = IF_SALV_C_BOOL_SAP=>FALSE
+*            r_container    =
+*            container_name =
+          IMPORTING
+            r_salv_table = DATA(lo_alv)
+          CHANGING
+            t_table      = tab.
+        lo_alv->display( ).
+      CATCH cx_salv_msg.
+    ENDTRY.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS cl_fetch IMPLEMENTATION.
+  METHOD constructor.
+    me->lo_cl_sel = lo_cl_sel.
+  ENDMETHOD.
+
+  METHOD fetch_data.
+    DATA: lo_str_ref TYPE REF TO cl_abap_structdescr,
+          lo_tab_ref TYPE REF TO cl_abap_tabledescr,
+          lr_tab_ref TYPE REF TO data,
+          li_comp    TYPE cl_abap_structdescr=>component_table,
+          error      TYPE REF TO cx_root.
+    FIELD-SYMBOLS : <fs_any>     TYPE any,
+                    <fs_any_tab> TYPE ANY TABLE.
+    lo_str_ref ?= cl_abap_typedescr=>describe_by_name( lo_cl_sel->tab ).
+
+    li_comp = lo_str_ref->get_components( ).
+    LOOP AT li_comp INTO DATA(lw_comp).
+      CONCATENATE '\b' lw_comp-name '\b' INTO lw_comp-name.
+      FIND REGEX lw_comp-name IN lo_cl_sel->cols.
+      IF sy-subrc <> 0.
+        DELETE li_comp INDEX sy-tabix.
+      ENDIF.
+    ENDLOOP.
+
+    TRY .
+        lo_str_ref = cl_abap_structdescr=>create( li_comp ).
+        lo_tab_ref = cl_abap_tabledescr=>create( lo_str_ref ).
+
+      CATCH cx_sy_move_cast_error INTO error.
+        MESSAGE error TYPE 'I'.
+        RETURN.
+
+      CATCH cx_sy_struct_creation
+            cx_sy_table_creation INTO  error.
+        MESSAGE error TYPE 'I'.
+        RETURN.
+    ENDTRY.
+    TRY .
+        CREATE DATA lr_tab_ref TYPE HANDLE lo_tab_ref.
+        ASSIGN lr_tab_ref->* TO <fs_any_tab>." CASTING TYPE HANDLE lo_tab_ref.
+      CATCH cx_sy_create_data_error INTO error.
+        MESSAGE error TYPE 'I'.
+        RETURN.
+    ENDTRY.
+    TRY .
+        SELECT (lo_cl_sel->cols) FROM
+          (lo_cl_sel->tab)
+          INTO CORRESPONDING FIELDS OF TABLE <fs_any_tab>
+          WHERE (lo_cl_sel->where).
+
+      CATCH cx_sy_sql_error INTO error.
+        MESSAGE error TYPE 'I'.
+        RETURN.
+    ENDTRY.
+    DATA(lo_display) = NEW cl_display(  ).
+    lo_display->display( CHANGING tab = <fs_any_tab> ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+START-OF-SELECTION.
+  PARAMETERS: p_tab   TYPE c LENGTH 132,
+              p_cols  TYPE c LENGTH 132,
+              p_where TYPE c LENGTH 132.
+  DATA(lo_select) = NEW cl_sel( ).
+  DATA(lo_fetch) = NEW cl_fetch( lo_cl_sel = lo_select ).
+  DATA(lo_display) = NEW cl_display( lo_ref_fetch = lo_fetch ).
+
+  lo_select->get_screen( EXPORTING im_tab = p_tab
+                                    im_cols = p_cols
+                                     im_where = p_where ).
+  lo_fetch->fetch_data( ).
+*  lo_display->display( lo_fetch-> ).
+
