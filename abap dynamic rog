@@ -1,3 +1,8 @@
+*&---------------------------------------------------------------------*
+*& Report zchaithur_dynpro_rtts1
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
 REPORT zchaithur_dynpro_rtts1.
 
 PARAMETERS: elm_rtts RADIOBUTTON GROUP rg1,
@@ -23,47 +28,47 @@ IF elm_rtts EQ abap_true.
   WRITE: <fs_any>.
 
 ELSEIF str_rtts EQ abap_true.
-DATA: li_components TYPE cl_abap_structdescr=>component_table,
-      lo_name_str  TYPE REF TO cl_abap_structdescr,
-      lr_str_ref TYPE REF TO data,
-      lv_comp TYPE i,
-      lv_type TYPE c.
-      field-SYMBOLS: <fs_any1> TYPE any,
-                     <fs_str> like LINE OF li_components,
-                     <fs_field> TYPE any.
+  DATA: li_components TYPE cl_abap_structdescr=>component_table,
+        lo_name_str   TYPE REF TO cl_abap_structdescr,
+        lr_str_ref    TYPE REF TO data,
+        lv_comp       TYPE i,
+        lv_type       TYPE c.
+  FIELD-SYMBOLS: <fs_any1>  TYPE any,
+                 <fs_str>   LIKE LINE OF li_components,
+                 <fs_field> TYPE any.
 
-                     APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
-                     <fs_str>-name = 'First_name'.
-                     <fs_str>-type  = cl_abap_elemdescr=>get_c( 40 ).
-                     APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
-                     <fs_str>-name = 'Middle_name'.
-                     <fs_str>-type  = cl_abap_elemdescr=>get_c( 1 ).
-                     APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
-                     <fs_str>-name = 'Last_name'.
-                     <fs_str>-type  = cl_abap_elemdescr=>get_c( 10 ).
+  APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
+  <fs_str>-name = 'First_name'.
+  <fs_str>-type  = cl_abap_elemdescr=>get_c( 40 ).
+  APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
+  <fs_str>-name = 'Middle_name'.
+  <fs_str>-type  = cl_abap_elemdescr=>get_c( 1 ).
+  APPEND INITIAL LINE TO li_components ASSIGNING <fs_str>.
+  <fs_str>-name = 'Last_name'.
+  <fs_str>-type  = cl_abap_elemdescr=>get_c( 10 ).
 
-                     lo_name_str = cl_abap_structdescr=>create( li_components ).
+  lo_name_str = cl_abap_structdescr=>create( li_components ).
 
-      CREATE DATA lr_str_ref TYPE HANDLE lo_name_str.
-       assign lr_str_ref->* TO <fs_any1>
-               CASTING TYPE HANDLE lo_name_str.
+  CREATE DATA lr_str_ref TYPE HANDLE lo_name_str.
+  ASSIGN lr_str_ref->* TO <fs_any1>
+          CASTING TYPE HANDLE lo_name_str.
 
-               DESCRIBE FIELD <fs_any1> TYPE lv_type COMPONENTS lv_comp.
+  DESCRIBE FIELD <fs_any1> TYPE lv_type COMPONENTS lv_comp.
 
-               DO lv_comp TIMES.
-                assign COMPONENT sy-index OF STRUCTURE <fs_any1> to <fs_field>.
+  DO lv_comp TIMES.
+    ASSIGN COMPONENT sy-index OF STRUCTURE <fs_any1> TO <fs_field>.
 
-                CASE sy-index.
+    CASE sy-index.
 
-                WHEN 1.
-                 write: /'Srimadvirata' .
-                WHEN 2.
-                WRITE: /'K'.
-                WHEN 3.
-                Write: /'Veera'.
-                ENDCASE.
+      WHEN 1.
+        WRITE: /'Srimadvirata' .
+      WHEN 2.
+        WRITE: /'K'.
+      WHEN 3.
+        WRITE: /'Veera'.
+    ENDCASE.
 
-               ENDDO.
+  ENDDO.
 
 
 ENDIF.
