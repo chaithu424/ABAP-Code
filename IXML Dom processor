@@ -1,0 +1,101 @@
+*&---------------------------------------------------------------------*
+*& Report zchaithur_dom_processor
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zchaithur_dom_processor.
+
+CLASS lcl_dom_process DEFINITION.
+  PUBLIC SECTION.
+    METHODS: add_partners IMPORTING im_name TYPE string
+                                    im_id   TYPE string
+                                    im_type TYPE i
+                                    im_date TYPE d,
+      display_dom,
+      constructor.
+    CLASS-METHODS : main,
+      class_constructor.
+  PRIVATE SECTION.
+    CLASS-DATA: ixml_factory TYPE REF TO if_ixml.
+    DATA: partners_doc  TYPE REF TO if_ixml_document,
+          partners_node TYPE REF TO if_ixml_element.
+    DATA: l_typ TYPE string,
+          i_tab TYPE RANGE OF string.
+ENDCLASS.
+CLASS lcl_dom_process IMPLEMENTATION.
+  METHOD class_constructor.
+    ixml_factory = cl_ixml=>create( ).
+
+  ENDMETHOD.
+  METHOD constructor.
+    partners_doc = ixml_factory->create_document( ).
+    partners_node = partners_doc->create_simple_element( name = 'BusinessPartners'
+                                                         parent = partners_doc ).
+
+  ENDMETHOD.
+  METHOD main.
+    DATA(lo_dom_process) = NEW lcl_dom_process( ).
+    lo_dom_process->add_partners( im_id = '356'
+                                   im_name = 'Tchm'
+                                   im_type = 1
+                                   im_date = '20140821' ).
+    lo_dom_process->add_partners( im_id = '678'
+   im_name = 'Cognos'
+   im_type = 1
+   im_date = '20180124' ).
+    lo_dom_process->add_partners( im_id = '458'
+   im_name = 'Delli'
+   im_type = 3
+   im_date = '20140821' ).
+    lo_dom_process->display_dom(  ).
+  ENDMETHOD.
+  METHOD add_partners.
+    DATA: lo_partners_node TYPE REF TO if_ixml_element,
+          l_date           TYPE string,
+          l_type           TYPE string.
+* statics: li_tab TYPE RANGE OF l_type.
+    DATA: lw_type LIKE LINE OF i_tab.
+
+    l_date = |{ im_date+6(2) }/{ im_date+4(2) }/{ im_date+0(4) }|.
+    l_type = im_type.
+    lo_partners_node = partners_doc->create_simple_element(  name = 'BusinessPartner'
+           parent = partners_node ).
+    IF NOT line_exists( i_tab[ low = l_type ] ).
+
+      lo_partners_node->set_attribute(  name = 'Type'
+    value = l_type ).
+*    ELSE.
+*    lo_partners_node = partners_doc->create_simple_element(  "name = 'BusinessPartner'
+*     parent = partners_node ).
+    ENDIF.
+
+
+    partners_doc->create_simple_element(  name = 'ID'
+                                           value = im_id
+                                            parent = lo_partners_node ).
+
+    partners_doc->create_simple_element(  name = 'VendorName'
+                                           value = im_name
+                                           parent = lo_partners_node ).
+
+    partners_doc->create_simple_element(  name = 'JoinDate'
+                                           value = l_date
+                                           parent = lo_partners_node ).
+    lw_type-sign  = 'I'.
+    lw_type-option = 'EQ'.
+    lw_type-low = l_type.
+    APPEND lw_type TO i_tab.
+
+  ENDMETHOD.
+  METHOD display_dom.
+    CALL FUNCTION 'SDIXML_DOM_TO_SCREEN'
+      EXPORTING
+        document = partners_doc.
+
+  ENDMETHOD.
+ENDCLASS.
+
+
+START-OF-SELECTION.
+
+  lcl_dom_process=>main( ).
