@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*& Report z661_retry_exception
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT z661_retry_exception.
+CLASS lcx_exp DEFINITION INHERITING FROM cx_static_check.
+
+ENDCLASS.
+CLASS lcl_main DEFINITION.
+
+  PUBLIC SECTION.
+
+    METHODS: call_inc IMPORTING im_int TYPE i" OPTIONAL
+                      EXPORTING ex_int TYPE i.
+ENDCLASS.
+
+CLASS lcl_main IMPLEMENTATION.
+
+  METHOD call_inc.
+    ex_int = im_int + 1.
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+data: l_int type i.
+  DATA(lo_main) = NEW lcl_main( ).
+  TRY.
+      lo_main->call_inc( EXPORTING im_int = l_int IMPORTING ex_int = l_int ).
+      IF l_int NE 5.
+        RAISE EXCEPTION TYPE lcx_exp.
+      ENDIF.
+    CATCH lcx_exp." into cx.
+      lo_main->call_inc( EXPORTING im_int = l_int
+                       IMPORTING ex_int = l_int ).
+      RETRY.
+  ENDTRY.
