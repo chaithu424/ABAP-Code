@@ -1,0 +1,69 @@
+*&---------------------------------------------------------------------*
+*& Report z661_resumable_exception
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT z661_resumable_exception.
+
+CLASS lcx_my_exception DEFINITION
+                    INHERITING FROM
+                     cx_static_check.
+  PUBLIC SECTION.
+    DATA: msg TYPE char50.
+    METHODS: constructor IMPORTING msg TYPE char50 OPTIONAL.
+
+ENDCLASS.
+
+CLASS lcx_my_exception IMPLEMENTATION.
+  METHOD constructor.
+    super->constructor( ).
+    me->msg  = msg.
+
+  ENDMETHOD.
+ENDCLASS.
+
+
+CLASS lcl_resumable_exp DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS: divide_by_zero_resume IMPORTING num        TYPE i
+                                                   den        TYPE i
+                                         RETURNING VALUE(res) TYPE i
+                                         RAISING RESUMABLE(lcx_my_exception).
+
+
+ENDCLASS.
+
+CLASS lcl_resumable_exp IMPLEMENTATION.
+  METHOD divide_by_zero_resume.
+    IF den = 0.
+      RAISE RESUMABLE EXCEPTION TYPE lcx_my_exception
+        EXPORTING
+          msg = 'This is triggered from resumable exception'.
+    ELSE.
+      res = num / Den.
+
+      WRITE:/ 'Result:', res.
+    ENDIF.
+    WRITE:/ 'Numerator:', num,
+          / 'Denominator', den.
+  ENDMETHOD.
+ENDCLASS.
+
+START-OF-SELECTION.
+  DATA: g_err TYPE abap_bool.
+        data: lo_my_excp TYPE ref to lcx_my_exception.
+  TRY.
+      DATA(result)  = lcl_resumable_exp=>divide_by_zero_resume( EXPORTING num = 10 den = 0 ) .
+      CASE g_err.
+        WHEN space.
+          WRITE: 'Result', result.
+        WHEN OTHERS.
+          WRITE: 'Result is undefined'.
+      ENDCASE.
+    CATCH BEFORE UNWIND lcx_my_exception INTO lo_my_excp.
+      WRITE:/ lo_my_excp->msg.
+      IF lo_my_excp->is_resumable = abap_true.
+        g_err = abap_true.
+        RESUME.
+      ENDIF.
+  ENDTRY.
