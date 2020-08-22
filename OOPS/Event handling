@@ -1,0 +1,116 @@
+*&---------------------------------------------------------------------*
+*& Report z661_event_handlers
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT z661_event_handlers.
+
+CLASS lcl_mammal DEFINITION.
+  PUBLIC SECTION.
+
+    METHODS: add_animal IMPORTING lo_obj    TYPE REF TO lcl_mammal.
+    "cry_sound TYPE string.
+    EVENTS: respond_to_cry EXPORTING VALUE(ev_msg) TYPE string.
+    DATA: cry TYPE string.
+
+ENDCLASS.
+
+CLASS lcl_mammal IMPLEMENTATION.
+
+  METHOD add_animal.
+    RAISE EVENT respond_to_cry EXPORTING ev_msg = cry.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lcl_cry_listen DEFINITION.
+  PUBLIC SECTION.
+    METHODS: respond_to_cry FOR EVENT respond_to_cry OF lcl_mammal
+      IMPORTING ev_msg sender.
+ENDCLASS.
+
+CLASS lcl_cry_listen IMPLEMENTATION.
+
+  METHOD respond_to_cry.
+    WRITE: / sender->cry, 'at', sy-uzeit."'Baby is crying, Please check'.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS lcl_cat DEFINITION INHERITING FROM lcl_mammal.
+
+  PUBLIC SECTION.
+    METHODS: constructor.
+*    DATA: cry TYPE string.
+
+ENDCLASS.
+
+CLASS lcl_cat IMPLEMENTATION.
+
+  METHOD constructor.
+
+    super->constructor( ).
+    cry = 'Cat is Meowing'.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lcl_dog DEFINITION INHERITING FROM lcl_mammal.
+
+  PUBLIC SECTION.
+    METHODS: constructor.
+*    DATA: cry TYPE string.
+ENDCLASS.
+
+CLASS lcl_dog IMPLEMENTATION.
+
+  METHOD constructor.
+
+    super->constructor( ).
+    cry = 'Dog is barking'.
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lcl_baby DEFINITION INHERITING FROM lcl_mammal.
+  PUBLIC SECTION.
+    METHODS: constructor.
+*    DATA: cry TYPE string.
+ENDCLASS.
+
+CLASS lcl_baby IMPLEMENTATION.
+
+  METHOD constructor.
+
+    super->constructor( ).
+    cry = 'Baby is crying'.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+
+  DATA(lo_mammal) = NEW lcl_mammal( ).
+  DATA(lo_alarm) = NEW lcl_cry_listen( ).
+  DATA(lo_cat) = NEW lcl_cat( ).
+  DATA(lo_dog) = NEW lcl_dog( ).
+  DATA(lo_baby) = NEW lcl_baby( ).
+
+  data: lr_range TYPE range of t.
+        lr_range = value #( ( option = 'BT'
+                              sign  = 'I'
+                              low = 190000
+                              high = 200000 ) ).
+    if sy-timlo in lr_range.
+    data(l_act_dog) = abap_true.
+    ENDIF.
+    set handler lo_alarm->respond_to_cry for lo_dog ACTIVATION l_act_dog.
+  SET HANDLER lo_alarm->respond_to_cry FOR lo_baby.
+
+  lo_mammal = CAST lcl_mammal( lo_cat ).                 "Narrow cast
+  lo_mammal->add_animal( EXPORTING lo_obj = lo_cat ).
+  lo_mammal = CAST lcl_mammal( lo_dog ).                "Narrow cast
+  lo_mammal->add_animal( EXPORTING lo_obj = lo_dog ).     "
+  lo_mammal = CAST lcl_mammal( lo_baby ).             "Narrow cast
+  lo_mammal->add_animal( EXPORTING lo_obj = lo_baby ).
