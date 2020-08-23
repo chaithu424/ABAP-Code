@@ -1,13 +1,37 @@
 --Imperative programming
 do begin
-declare l_str int default 1;
-declare l_end int default 10;
-declare l_sum int;
-declare l_indx int;
-for l_indx in 1..10 do
-l_sum = :l_sum + 10;
+  declare l_str int default 1;
+  declare l_end int default 10;
+  declare l_sum int default 0;
+  declare l_indx int;
+  for l_indx in l_str..l_end do
+    l_sum = :l_sum + 10;
+  end for;
+  select :l_sum from dummy;
+end;       
+******************************************************************************************
+--EXIT HANDLER FOR SQLEXCEPTION
+***************************************************************************************
+CREATE PROCEDURE get_assignee_status
+       (IN  iv_id INT,
+        OUT ov_assignee INT,
+        OUT ov_status INT  )
+AS BEGIN
+--Up to HANA 2.0 SPS 03:
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+     BEGIN
+        ov_assignee = -1;
+        ov_status     = -1;
+     END;
+SELECT assignee,
+         status
+  INTO ov_assignee ,
+        ov_status
+  DEFAULT -1,    --From HANA 2.0 SPS 03: Defaultdvalues
+          -1     --for variables at the assignment
+  FROM tasks
+  WHERE id = iv_id;
+END;
+CALL get_assignee_status(1, ?, ?);
+CALL get_assignee_status(-1, ?, ?);
 
-end for;
-
-select :l_sum from dummy;
-end;     
