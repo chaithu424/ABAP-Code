@@ -96,18 +96,101 @@ do ( out ot_result table( id int,
                           text1 nvarchar(50),
                           text2 nvarchar(50))=>? )
                           begin
-   declare l_indx int,
-   declate lt_tmp tables(col1 int,
+   declare l_indx int;
+   declare lt_tmp table (col1 int,
                           col2 nvarchar(50) );
   --Build lt_tmp                        
-        :lt_tmp.insert( '1', 'Hari' );
-        :lt_tmp.inser( '2', 'Chaitanya');
+        :lt_tmp.insert((1, 'Hari' ));
+        :lt_tmp.insert((2, 'Chaitanya'));
                            
 --Build out table result
- :ot_result.insert( '1', 'First Record', 'A');
-  :ot_result.insert( '2', 'second Record', 'B');
-   :ot_result.insert( '3', 'Third Record', 'C');
+ :ot_result.insert((1, 'First Record', 'A'));
+  :ot_result.insert((2, 'second Record', 'B'));
+   :ot_result.insert((3, 'Third Record', 'C'));
  --Append lines of table in ABAP, but with different structures
  :ot_result.(id, text1).insert( :lt_tmp, 2 );
 end;
-                          
+--*******************************************************
+--Insert lines using UPDATE statement
+--*******************************************************
+--//Update
+do ( out ot_res table( text nvarchar(40) )=>? )
+begin
+ DECLARE indx integer;
+:ot_res.insert(('Insert 1'), 1);
+:ot_res.insert(('Insert 2'), 2);
+:ot_res.insert(('Insert 3'), 3);
+--UPDATE lines 2 and 4
+:ot_res.update(('Update1'),2);
+:ot_res.update(('update4'),4);
+--Skip for index 5 which will be filled with null values
+ot_res[6] = ('insert 6');  --Another way of appending
+end;
+
+--*******************************************************
+--Insert lines using UPDATE statement
+--:<tablevariable>[.<columnlist>].UPDATE((<valuelist>),
+    --                                         <position>);
+--///Alternatively, a syntax variant similar to index-based access can also be followed:
+--<tablevariable>[.<columnlist>].[<position>] = (<valuelist>);
+
+--*******************************************************
+--//Update
+do ( out ot_res table( text nvarchar(40) )=>? )
+begin
+ DECLARE indx integer;
+:ot_res.insert(('Insert 1'), 1);
+:ot_res.insert(('Insert 2'), 2);
+:ot_res.insert(('Insert 3'), 3);
+--UPDATE lines 2 and 4
+:ot_res.update(('Update1'),2);
+:ot_res.update(('update4'),4);
+--Skip for index 5 which will be filled with null values
+ot_res[6] = ('insert 6');  --Another way of appending
+end;
+
+
+--*******************************************************
+--Delete statement in SQL script
+-- <tablevariable>.DELETE([<rows>]);
+--********************************************************
+
+DO (OUT ot_result TABLE(text NVARCHAR(100))=>?)
+BEGIN
+   DECLARE lv_index INT;
+   DECLARE lv_del INT ARRAY = ARRAY(1, 3);
+-- Build a table with the rows 1 t0 10
+   FOR lv_index IN 1..10 DO
+      :ot_result.INSERT(('Line '||lv_index), lv_index);
+   END FOR;
+-- Deletion of the line at index 9
+   :ot_result.DELETE(9);
+-- Deletion of the lines 5 to 7
+   :ot_result.DELETE(5..7);
+-- Deletion of the lines from the array LV_DEL
+   :ot_result.DELETE(:lv_del);
+END;                          
+
+--*******************************************************
+--Search operator in SQL script
+-- :<tablevariable>.SEARCH((<columnlist>),
+ --                         (<valuelist>),
+    --                     [<startindex>]);
+--Returns the index of the serching values 
+--********************************************************
+--859966 searching for user in both columns ernam and aenam
+do( out ot_res table( matnr nvarchar(40), 
+               ernam nvarchar(12),
+               aenam nvarchar(12))=>?)
+   begin
+    declare l_idx int = 0;           
+               
+    ot_res = select matnr, ernam, aenam from mara_copy where
+                  ernam = '859966';
+  l_idx = :ot_res.search( (ernam, aenam), (859966, 859966) );
+   
+  :ot_res.delete(l_idx);
+   
+   :ot_res.delete(:ot_res.search((ernam,aenam), (859966,859966)));
+                      
+               end;
