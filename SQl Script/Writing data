@@ -1,0 +1,42 @@
+select aenam from saphanadb.mara
+drop table mara_copy;
+create column table mara_copy( matnr nvarchar(40),-- primary key,
+                               ersda nvarchar(8),
+                               ernam nvarchar(12),
+                               aenam nvarchar(12),
+                               mtart nvarchar(4),
+                               bstme nvarchar(3) );
+                               
+                               
+                               insert into mara_copy( matnr, ersda, ernam, mtart )
+                                select matnr, ersda, ernam, mtart from saphanadb.mara;
+                                
+                                update mara_copy as t2
+                                set t2.bstme = t1.bstme,
+                                      t2.aenam = t1.aenam
+                                
+                                from mara_copy as t2,
+                                 saphanadb.mara as t1
+                                 where t2.matnr = t1.matnr;
+                                select *, coalesce( aenam, current_user ) from mara_copy;-- where bstme not '';
+     
+     CREATE TABLE table_1(
+   key1 INT DEFAULT 5,
+   key2 INT,
+   value1 NVARCHAR(200),
+   PRIMARY KEY (
+      key1,
+      key2   )
+);
+CREATE TABLE table_2(
+   key1 INT PRIMARY KEY,
+   value1 NVARCHAR(200),
+   value2 NVARCHAR(200)
+);      
+
+INSERT INTO table_2 VALUES(1, '', 'First row');
+INSERT INTO table_2 VALUES(2, '', 'Second row');
+INSERT INTO table_2 VALUES(3, '', 'Third row');
+INSERT INTO table_2 VALUES(4, '', 'Forth row');
+select * from table_1;
+select * from table_2;
