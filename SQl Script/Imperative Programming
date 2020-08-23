@@ -1,0 +1,13 @@
+--Imperative programming
+do begin
+declare l_str int default 1;
+declare l_end int default 10;
+declare l_sum int;
+declare l_indx int;
+for l_indx in 1..10 do
+l_sum = :l_sum + 10;
+
+end for;
+
+select :l_sum from dummy;
+end;     
