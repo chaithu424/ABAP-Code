@@ -34,4 +34,80 @@ SELECT assignee,
 END;
 CALL get_assignee_status(1, ?, ?);
 CALL get_assignee_status(-1, ?, ?);
+******************************************************
+--Index access in local table 
+***********************************************************
 
+DO (OUT ot_result TABLE( matnr nvarchar(40),
+                         maktx NVARCHAR(40))=>?)
+BEGIN
+   ot_result = SELECT top 10  matnr, maktx FROM saphanadb.makt;
+   ot_result.maktx[1] = 'Title: ' || :ot_result.maktx[1];
+END;
+*********************************************
+--Append operation in local tables
+********************************************
+
+DO (OUT rt_result TABLE( id INT,
+                         text1 NVARCHAR(50),
+                         text2 NVARCHAR(50))=>? )
+BEGIN
+   DECLARE lv_index INT;
+FOR lv_index IN 1..5
+   DO
+-- Inserting all columns at position 1
+      :rt_result.INSERT((lv_index,
+                         'Insert '||lv_index, '')
+                         , 1);
+   END FOR;
+FOR lv_index IN 1..5
+   DO
+-- Append to the table, only for two columns
+      :rt_result.(id, text2).INSERT((lv_index,
+                                     'Append '||lv_index));
+   END FOR;
+END;
+*********************************************************
+--Appending tables
+**********************************************************
+DO (OUT rt_result TABLE( id INT,
+                         text1 NVARCHAR(50),
+                         text2 NVARCHAR(50))=>? )
+BEGIN
+   DECLARE lv_index INT;
+FOR lv_index IN 1..5
+   DO
+-- Inserting all columns at position 1
+      :rt_result.INSERT((lv_index,
+                         'Insert '||lv_index, '')
+                         , 1);
+   END FOR;
+FOR lv_index IN 1..5
+   DO
+-- Append to the table, only for two columns
+      :rt_result.(id, text2).INSERT((lv_index,
+                                     'Append '||lv_index));
+   END FOR;
+END;
+***************************************************
+--Apendng table variables like append lines in aBAP
+************************************************
+do ( out ot_result table( id int,
+                          text1 nvarchar(50),
+                          text2 nvarchar(50))=>? )
+                          begin
+   declare l_indx int,
+   declate lt_tmp tables(col1 int,
+                          col2 nvarchar(50) );
+  --Build lt_tmp                        
+        :lt_tmp.insert( '1', 'Hari' );
+        :lt_tmp.inser( '2', 'Chaitanya');
+                           
+--Build out table result
+ :ot_result.insert( '1', 'First Record', 'A');
+  :ot_result.insert( '2', 'second Record', 'B');
+   :ot_result.insert( '3', 'Third Record', 'C');
+ --Append lines of table in ABAP, but with different structures
+ :ot_result.(id, text1).insert( :lt_tmp, 2 );
+end;
+                          
