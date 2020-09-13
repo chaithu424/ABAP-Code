@@ -1,7 +1,10 @@
 *&---------------------------------------------------------------------*
 *& Report z661_event_handlers
 *&---------------------------------------------------------------------*
-*&
+*& Creating the alarm system at home which triggers on baby cry 24 * 7
+*but trigger alarm when dog barks after 12 in night and dont care for 
+* meow of the cat any time, create event to trigger alarm on sounds of
+* different mammals
 *&---------------------------------------------------------------------*
 REPORT z661_event_handlers.
 
