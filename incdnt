@@ -14,6 +14,8 @@ INC001056851144	Milestone Report enhancement changes required.
 INC001056810805	FCT - OPEN is not available in system . even though system picks for some material and creating a process order in 
 INC001056821329	Add additional columns for label proof report from table
 
-CRQ000000521185	 EHS -Add Countries manually in Country Language selection screen.
+CRQ000000521185	 EHS -Add Countries manually in Country Language selection screen.For all label types, 
+a new “Add Country” button will be added into label content definition screen.
+Below program logic will create and display manually added country-language list for a protocol ID.
 CRQ000000534430	Correct FCT program to ignore non numeric Value in Dropout & Patient switches&give error msg
 ALM46489	SCM PE COEBR - Internal: Prg-error in LCOSFU21  while approving Batch Record(Order Independent Lots)
