@@ -1,0 +1,16 @@
+INC001056487990	Serial numbers dropping issue
+INC001056577672	Label data issue in MM02/MM01
+TAS000001204345	Patient switch and drop out field 
+	not showing error message for non-numeric values
+TAS000001206327	Issue with CFG EDBP Earmarking
+TAS000001208752	Unable to archive the Batch record in COEBR R030334_02
+TAS000001213963	print program issue
+INC001056824947	Issue with calculation of Unsatisfied Demand in CFG Earmarking
+DT 49838	Error message enhancement at the time of calculation run
+INC001056851144	Milestone Report enhancement changes required.
+INC001056810805	FCT - OPEN is not available in system . even though system picks for some material and creating a process order in 
+INC001056821329	Add additional columns for label proof report from table
+
+CRQ000000521185	 EHS -Add Countries manually in Country Language selection screen.
+CRQ000000534430	Correct FCT program to ignore non numeric Value in Dropout & Patient switches&give error msg
+ALM46489	SCM PE COEBR - Internal: Prg-error in LCOSFU21  while approving Batch Record(Order Independent Lots)
