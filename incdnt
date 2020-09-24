@@ -7,6 +7,9 @@ TAS000001208752	Unable to archive the Batch record in COEBR R030334_02
 TAS000001213963	print program issue
 INC001056824947	Issue with calculation of Unsatisfied Demand in CFG Earmarking
 DT 49838	Error message enhancement at the time of calculation run
+1.	Once issue comes in single error in the demand calculation run > System copy the previous successful results for S990 and S990E.
+2.	If it is calculation successful > System update the S990 and S990E table what ever the data available in current FCT run.
+
 INC001056851144	Milestone Report enhancement changes required.
 INC001056810805	FCT - OPEN is not available in system . even though system picks for some material and creating a process order in 
 INC001056821329	Add additional columns for label proof report from table
