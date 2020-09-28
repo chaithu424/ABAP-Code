@@ -1,18 +1,59 @@
 INC001056487990	Serial numbers dropping issue
+In Pack Verification report, while dropping the serial numbers in both the cases of ‘Discard Medkits’ and ‘Not Packed Medkits’, the kit id status ‘8-dropped’ is 
+updated in the /LMC/CTM_RDN_DET table to a random entry but not to the relevant order, as we have multiple entries for a serial number in the /LMC/CTM_RDN_DET table.
 INC001056577672	Label data issue in MM02/MM01
-TAS000001204345	Patient switch and drop out field 
-	not showing error message for non-numeric values
+•	User mapped to .x294 or .x594 role is unable to change the labeling specification on the tab label data for a ZERP/PRN. As per new enhanced logic, .x294 or .x594 users should be allowed when there is Flag = X for a Material Type + Supply Stage code.
+•	Authorization error in MM03 transaction when navigating from Global Attribute tab.
+TAS000001204345	Patient switch and drop out field not showing error message for non-numeric values
+In FCT, the following issues are identified while performing patient switches by providing Non-numeric values in switching window.
+1.	 System allows to enter non-numeric value, but not saving the non-numeric value.
+2.            System don’t calculate the patient switch and drop-out rate for non-numeric value.
+3.            System don’t calculate and save the Patient switches and Drop-out rate for the numeric value    enter after the non-numeric value. 
+4.            Entering special character (. Or , )in drop out and patient switch shows the error dump.
+5.            One of column description in error message log is not appearing in full when Patient switching exceeds 100
+	
 TAS000001206327	Issue with CFG EDBP Earmarking
+In /LMC/CTM_CFG_EARMARK report, the excess quantity is getting earmarked in a depot. The change to be done to correct the issue.
+Testing to be performed for multiple scenarios in which the Earmarking of Quantity from multiple depots, so extensive testing to be done.
 TAS000001208752	Unable to archive the Batch record in COEBR R030334_02
+User is unable to archive the Batch Record in COEBR due to Order independent inspection lots that are fetched and displayed in COEBR. Filtering logic is implemented to 
+restrict the order indpendent inspection lots
 TAS000001213963	print program issue
+Performance issue in production when printing large quantity of clinical labels. When user clicks on print study labels the program triggers a back ground job 
+to process the print request for the total quantity of the labels. During this process we need ABAP analysis on how the print request is getting created and processed. 
+As per the logic is one custom parameter, which states that it creates one print request for one label. 
+
+The ask here is to replace the custom parameter to standard one (EHS_SERLS0) and need to explore if one print request can be created for multiple labels and 
+thus reduce the print timing.
+
 INC001056824947	Issue with calculation of Unsatisfied Demand in CFG Earmarking
 DT 49838	Error message enhancement at the time of calculation run
 1.	Once issue comes in single error in the demand calculation run > System copy the previous successful results for S990 and S990E.
 2.	If it is calculation successful > System update the S990 and S990E table what ever the data available in current FCT run.
 
 INC001056851144	Milestone Report enhancement changes required.
+In Mile-stone report, below mentioned enhancements to be implemented:
+•	PCN ID to be displayed for the Purchase orders in the output.
+•	New column required in the output as "Firming Indicator", to be relevant only for the Planned order and Purchase requisition.
+•	New column Material Availability Date(MAD)  to be displayed in the output for all MRP elements:
+	 Planned Order
+	Process Order
+	Purchase Requisition
+	Purchase Order.
+•	Milestone report should filter the Purch. Req. having closed indicator set. ->  EBAN-EBAKZ = X (Closed) and filter Process Order with DLV status in Report output.
+•	Hotspot for Planned orde to navigate to Transaction MD12( Change Planned Order)
+•	Hotspot for Purchase requisition to navigate to transaction ME53N
+•	Hotspot for Process order to transaction COR2( Change Process order ).
+•	Refresh button to update the entries in Mile-stone report.
+
 INC001056810805	FCT - OPEN is not available in system . even though system picks for some material and creating a process order in 
+Analysis on, from where system picks the FCT – Open and populating in process order system  attached some of the recent orders 
+Due to this issue we are unable to process the RAND tool assignment 
+
 INC001056821329	Add additional columns for label proof report from table
+•	Add 5 new columns to label proof report as Country Approver ID, Country Approver Name, Country Approved Date, Country Approved Time and a non editable checkbox as Country Approval Required Indicator.
+•	Country approver ID, Country Approver name, Country approved Date & Country approved Time will be based on table /LSRD/LPM_APPROV.
+•	Country approval required check box will be based on table /LSRD/LBL_LCR, if label design approval required flag is true then country approval required check box will be ticked else not.
 
 CRQ000000521185	 EHS -Add Countries manually in Country Language selection screen.For all label types, 
 a new “Add Country” button will be added into label content definition screen.
