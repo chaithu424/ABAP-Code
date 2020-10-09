@@ -2,11 +2,14 @@
 *& Report ZCHAITHUR_DYNTAB_RTTS2
 *&---------------------------------------------------------------------*
 *&https://merck.webex.com/merck/e.php?MTID=m7a667ee0e598ef967bfdafc426a260c2
+Hari Chaitanya Attirala's Personal Room
+https://merck.webex.com/meet/pr741578070
 *&---------------------------------------------------------------------*
 REPORT zchaithur_dyntab_rtts2.
 
 
 CLASS cl_sel DEFINITION.
+
 
   PUBLIC SECTION.
     METHODS: get_screen IMPORTING im_tab   TYPE csequence
