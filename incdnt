@@ -75,3 +75,10 @@ Analysis/development/ UT/ Doc/ Review /  Retrofit /
 •	Applens time sheet compliance 100% target
 •	Exhibit Consistent Reporting (ex) Daily, Weekly, Monthly reporting.
 •	Rewards, recognition and appreciations   :  1 liner and attached the  Appreciation mail 
+
+INC001056972400 : Print order status update
+DT 49838 : Error message enhancement at the time of calculation run
+CR543357 : Correct FCT program to display full text of error message in calculation run & Treatment Grp
+DT 51603 : Conditional removal of columns from the FCT scenario country tab based on the radio buttons selected in other tabs.
+CR552761: Enhancement for rounding issue in FCT Planned Patient distribution calculation – 49878
+
