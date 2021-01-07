@@ -117,3 +117,3030 @@ START-OF-SELECTION.
   lo_mammal->add_animal( EXPORTING lo_obj = lo_dog ).     "
   lo_mammal = CAST lcl_mammal( lo_baby ).             "Narrow cast
   lo_mammal->add_animal( EXPORTING lo_obj = lo_baby ).
+
+
+*&---------------------------------------------------------------------*
+*& Report ZGRSCM_PRINT_ORDER_REVIEW
+*&---------------------------------------------------------------------*
+************************************************************************
+* MERCK                                                                *
+* Global/Local  : Global   List Site(s): N/A                           *
+* FS Document ID: R_MERCK_SCM_EDD35525                                 *
+* TS Document ID: R_MERCK_SCM_EDS36155                                 *
+* TS Title      : MRL GCS Next Gen_EHS_Clinical Label Generation       *
+* CTS No        : DR1K9A0C3D                                           *
+* Object Description: Report to enable users to perform Review for     *
+*                     selected quantity of Rolls for print order       *
+************************************************************************
+* Revision Log:                                                        *
+* Init.    Author/Reviser   Date         Description        CTS#       *
+* Initial  Hari Chaitanya   13-AUG-2019   ALM43441          DR1K9A0C3D *
+************************************************************************
+*&
+*&---------------------------------------------------------------------*
+REPORT zgrscm_print_order_review MESSAGE-ID /lmc/ctm_prtord.
+
+*--------------------------------------------------------------------*
+*-- TOP INCLUDE DECLARATION
+*--------------------------------------------------------------------*
+INCLUDE  zgnscm_print_order_review_top.
+
+*--------------------------------------------------------------------*
+*-- SELECTION SCREEN DECLARATION
+*--------------------------------------------------------------------*
+INCLUDE  zgnscm_print_order_review_sel.
+*--------------------------------------------------------------------*
+*-- METHOD IMPLEMENTATIONS
+*--------------------------------------------------------------------*
+INCLUDE  zgnscm_print_order_review_f01.
+
+INITIALIZATION.
+
+  lcl_events=>object_inst( ).
+
+START-OF-SELECTION.
+
+
+  o_events->on_start_of_selec( CHANGING ct_prt_ord_data = i_print_data ) .
+  
+  *&---------------------------------------------------------------------*
+*&  Include           ZGNSCM_PRINT_ORDER_REVIEW_TOP
+*&---------------------------------------------------------------------*
+************************************************************************
+* MERCK                                                                *
+* Global/Local  : Global   List Site(s): N/A                           *
+* FS Document ID: R_MERCK_SCM_EDD35525                                 *
+* TS Document ID: R_MERCK_SCM_EDS36155                                 *
+* TS Title      : MRL GCS Next Gen_EHS_Clinical Label Generation       *
+* CTS No        : DR1K9A0C3D                                           *
+* Object Description: Report to enable users to perform Review for     *
+*                     selected quantity of Rolls for print order       *
+************************************************************************
+* Revision Log:                                                        *
+* Init.    Author/Reviser   Date         Description        CTS#       *
+* Initial  Hari Chaitanya   13-AUG-2019   ALM43441          DR1K9A0C3D *
+************************************************************************
+*&
+*&---------------------------------------------------------------------*
+
+TABLES: /lmc/ctm_prt_ord.
+
+
+TYPES : BEGIN OF ty_error_log,
+          row_id    TYPE i,
+          fname     TYPE lvc_fname,
+          rev_level TYPE zgscm_review_level,
+          roll_from TYPE zgscm_roll_from,
+          roll_to   TYPE zgscm_roll_to,
+          message   TYPE text100,
+          message1  TYPE text100,
+        END OF ty_error_log.
+
+TYPES : BEGIN OF ty_rolls,
+          rolls(6) TYPE n,
+        END OF ty_rolls.
+
+TYPES: BEGIN OF ty_rolls_range,
+         rev_level TYPE  zgscm_review_level,
+         rolls(6)  TYPE n,
+         status    TYPE  zgscm_review_status,
+         user      TYPE  zgscm_review_user,
+       END OF ty_rolls_range.
+
+
+TYPES: ty_tt_output TYPE STANDARD TABLE OF zgscm_review_labels,
+       ty_tt_print  TYPE STANDARD TABLE OF zgscm_print_log.
+
+DATA: g_container        TYPE scrfname VALUE 'G_CUSTOM_CONTIANER' ##NEEDED,
+      o_grid             TYPE REF TO cl_gui_alv_grid ##NEEDED,
+      o_custom_container TYPE REF TO cl_gui_custom_container ##NEEDED,
+      i_fieldcat         TYPE lvc_t_fcat ##NEEDED,
+      i_output           TYPE STANDARD TABLE OF zgscm_review_labels ##NEEDED,
+      i_print_data       TYPE ty_tt_print ##NEEDED,
+      i_print_rolls      TYPE STANDARD TABLE OF ty_rolls ##NEEDED,
+      i_rolls_range      TYPE STANDARD TABLE OF ty_rolls_range ##NEEDED,
+      i_rolls_review     TYPE STANDARD TABLE OF ty_rolls_range ##NEEDED,
+      i_error_log        TYPE STANDARD TABLE OF ty_error_log ##NEEDED,
+      i_exclude          TYPE ui_functions ##NEEDED.
+DATA: g_ok_code       TYPE sy-ucomm ##NEEDED,
+      g_prt_order     TYPE /lmc/ctm_prtorder,
+      g_target_rolls  TYPE i,
+      g_act_rolls     TYPE i,
+      g_frst_rev      TYPE string,
+      g_sec_rev       TYPE string,
+      g_rev_sum       TYPE string,
+      g_flag          TYPE char01 ##NEEDED,
+      g_error_in_data TYPE char01 ##NEEDED,
+      g_prt           TYPE char01 ##NEEDED.
+
+CONSTANTS: c_not_strt   TYPE zgscm_review_status VALUE 'NOT STARTED',
+           c_in_prg     TYPE zgscm_review_status VALUE 'IN PROGRESS',
+           c_comp       TYPE zgscm_review_status VALUE 'COMPLETED',
+           c_1          TYPE zgscm_review_level  VALUE '01',
+           c_2          TYPE zgscm_review_level VALUE '02',
+           c_rev_lev    TYPE lvc_fname VALUE 'REV_LEVEL',
+           c_roll_from  TYPE lvc_fname VALUE 'ROLL_FROM',
+           c_roll_to    TYPE lvc_fname VALUE 'ROLL_TO',
+           c_rev_user   TYPE lvc_fname VALUE 'REV_USER',
+           c_prtorder   TYPE lvc_fname VALUE 'PRTORDER',
+           c_status     TYPE lvc_fname VALUE 'STATUS',
+           c_ins_type   TYPE lvc_fname VALUE 'INSP_TYP',
+           c_roll_nos   TYPE lvc_fname VALUE 'ROLL_NOS',
+           c_ltext      TYPE lvc_fname VALUE 'LTEXT_ICON',
+           c_celltab    TYPE lvc_fname VALUE 'CELLTAB',
+           c_id         TYPE thead-tdid VALUE '0001',
+           c_disp_chg   TYPE ui_func  VALUE 'DISP_CHG',
+           c_delete     TYPE ui_func  VALUE 'DELTE',
+           c_lsrd_ctrr  TYPE thead-tdobject VALUE '/LSRD/CTRR',
+           c_mesg_class TYPE symsgid VALUE '/LMC/CTM_PRTORD',
+           c_en         TYPE char2 VALUE 'EN',
+           c_checked    TYPE char01 VALUE 'X',
+           c_i          TYPE char01 VALUE 'I',
+           c_e          TYPE char01 VALUE 'E',
+           c_s          TYPE char01 VALUE 'S',
+           c_asterisk   TYPE tdformat VALUE '*',
+           c_zero       TYPE char01 VALUE '0',
+           c_comma      TYPE char01 VALUE ','.
+
+
+
+* Class definition of LCL_REVIEW
+
+CLASS lcl_review DEFINITION FINAL.
+
+  PUBLIC SECTION.
+
+    METHODS: create_alv CHANGING ct_output   TYPE ty_tt_output
+                                 ct_fieldcat TYPE lvc_t_fcat
+                                 ct_exclude  TYPE ui_functions,
+      build_field_cat CHANGING ct_fcatalog TYPE lvc_t_fcat,
+
+      exclude_functions CHANGING ct_exclude TYPE ui_functions,
+
+      get_data CHANGING ct_outtab TYPE ty_tt_output,
+
+      start_review,
+
+      complete_review,
+      refresh_data,
+      update_review_status,
+      update_roll_no,
+      update_rolls_range,
+      lock_data
+        IMPORTING i_data  TYPE zgscm_review_labels
+        EXPORTING e_error TYPE char01,
+      unlock_data IMPORTING i_data TYPE zgscm_review_labels.
+
+ENDCLASS.
+
+*  Class definition for LCL_EVENTS
+CLASS lcl_events DEFINITION FINAL.
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS: object_inst.
+
+    METHODS:
+      handle_toolbar
+                    FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object.
+
+    METHODS:  handle_data_changed
+                  FOR EVENT data_changed OF cl_gui_alv_grid
+      IMPORTING er_data_changed
+                  e_ucomm.
+
+
+    METHODS:  handle_double_click
+          FOR EVENT double_click OF cl_gui_alv_grid
+      IMPORTING
+          e_column
+          es_row_no.
+
+
+    METHODS: handle_user_command
+                  FOR EVENT user_command OF cl_gui_alv_grid
+      IMPORTING e_ucomm.
+
+
+    METHODS:  check_error_log
+      IMPORTING
+        ir_data_changed TYPE REF TO cl_alv_changed_data_protocol.
+
+    METHODS: check_duplicate_entries
+      IMPORTING
+        ir_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+      get_rolls_range.
+
+    METHODS:
+      modify_cell_values
+        IMPORTING
+          ir_data_changed TYPE REF TO cl_alv_changed_data_protocol.
+
+    METHODS:
+      calc_rolls
+        IMPORTING i_good          TYPE lvc_s_modi
+                  ir_data_changed TYPE REF TO cl_alv_changed_data_protocol.
+
+    METHODS:
+      on_start_of_selec
+        CHANGING ct_prt_ord_data TYPE ty_tt_print.
+
+  PRIVATE SECTION.
+    DATA: i_chg_out TYPE ty_tt_output.
+
+ENDCLASS.
+
+DATA: o_review TYPE REF TO lcl_review ##NEEDED.
+DATA: o_events TYPE REF TO lcl_events ##NEEDED.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZGNSCM_PRINT_ORDER_REVIEW_SEL
+*&---------------------------------------------------------------------*
+************************************************************************
+* MERCK                                                                *
+* Global/Local  : Global   List Site(s): N/A                           *
+* FS Document ID: R_MERCK_SCM_EDD35525                                 *
+* TS Document ID: R_MERCK_SCM_EDS36155                                 *
+* TS Title      : MRL GCS Next Gen_EHS_Clinical Label Generation       *
+* CTS No        : DR1K9A0C3D                                           *
+* Object Description: Report to enable users to perform Review for     *
+*                     selected quantity of Rolls for print order       *
+************************************************************************
+* Revision Log:                                                        *
+* Init.    Author/Reviser   Date         Description        CTS#       *
+* Initial  Hari Chaitanya   13-AUG-2019   ALM43441          DR1K9A0C3D *
+************************************************************************
+*&
+*&---------------------------------------------------------------------*
+
+
+  SELECT-OPTIONS: s_prord FOR /lmc/ctm_prt_ord-prtorder OBLIGATORY
+                                                         NO INTERVALS
+                                                         NO-EXTENSION
+                                                         MATCHCODE OBJECT /lmc/ctm_prtorder.
+                                                         
+                                                                  user tries to review rolls for*
+*                                        which Review status is already*
+*                                        COMPLETED                     *
+************************************************************************
+*&
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_9000  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_9000 OUTPUT.
+
+  SET PF-STATUS 'STATUS_REVIEW'.
+  SET TITLEBAR  'TITLE_REVIEW'.
+*  CREATE_ALV method builds the fieldcatalog, Fetches data
+*  from database and display the ALV grid
+  o_review->create_alv(
+   CHANGING
+     ct_output   = i_output
+     ct_fieldcat = i_fieldcat
+     ct_exclude  = i_exclude ).
+* 'UPDATE_REVIEW_STATUS' updates the first rev. status
+* Second Review status and Review summary
+  CALL METHOD o_review->update_review_status( ).
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9000  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9000 INPUT.
+
+
+  g_ok_code = sy-ucomm.
+
+  CASE g_ok_code .
+
+    WHEN 'BACK' OR 'EXIT' OR 'CANC'.
+
+      LEAVE PROGRAM.
+
+    WHEN 'STR_REV'.
+
+      CALL METHOD o_review->start_review( ).
+*
+    WHEN 'COMP_REV'.
+
+      CALL METHOD o_review->complete_review( ).
+
+    WHEN 'REFRESH'.
+
+      CALL METHOD o_review->refresh_data( ).
+
+  ENDCASE.
+ENDMODULE.
+CLASS lcl_review IMPLEMENTATION.
+
+  METHOD create_alv.
+
+    DATA: lw_vari   TYPE disvariant,   "ATC name
+          lw_layout TYPE lvc_s_layo.
+    CONSTANTS: lc_a TYPE char01 VALUE 'A'.
+*   Roll No's to be fetched from print log table
+*   Actual and Target Printed rolls to be updated
+    CALL METHOD o_review->update_roll_no( ).
+
+*   Instantiation of the Container
+    CREATE OBJECT o_custom_container
+      EXPORTING
+        container_name = g_container.
+
+*   Instantiate the Grid by passing the container
+    CREATE OBJECT o_grid
+      EXPORTING
+        i_parent = o_custom_container.
+
+*   'GET_DATA' fetches the data from table
+    CALL METHOD me->get_data(
+      CHANGING
+        ct_outtab = ct_output ).
+
+*   Build Fieldcatalog
+    CALL METHOD me->build_field_cat(
+      CHANGING
+        ct_fcatalog = ct_fieldcat ).
+
+*   Exclude functions from the ALV toolbar
+    CALL METHOD me->exclude_functions(
+      CHANGING
+        ct_exclude = ct_exclude ).
+
+
+    lw_vari-report = sy-repid.
+    lw_layout-stylefname = c_celltab.
+*  call method to display ALV on the output screen
+    CALL METHOD o_grid->set_table_for_first_display
+      EXPORTING
+        is_variant                    = lw_vari
+        i_save                        = lc_a
+        i_default                     = c_checked
+        is_layout                     = lw_layout
+        it_toolbar_excluding          = ct_exclude
+      CHANGING
+        it_outtab                     = ct_output[]
+        it_fieldcatalog               = ct_fieldcat[]
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        program_error                 = 2
+        too_many_lines                = 3
+        OTHERS                        = 4.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+*  SET handler methods for added functions
+*   Register edit event by passing the mc_evt_enter to
+*   detect the change on hit of Enter button in ALV
+    CALL METHOD o_grid->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_enter.
+*  Register edit event by passing the mc_evt_modified to
+*  detect the change done automatically in ALV
+    CALL METHOD o_grid->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+*  SET handler methods for added functions
+    SET HANDLER  o_events->handle_toolbar FOR o_grid.
+    SET HANDLER  o_events->handle_user_command FOR o_grid.
+    SET HANDLER o_events->handle_data_changed FOR o_grid.
+    SET HANDLER o_events->handle_double_click FOR o_grid.
+*  Call method 'set_toolbar_interactive' to raise event TOOLBAR.
+    CALL METHOD o_grid->set_toolbar_interactive( ).
+
+
+  ENDMETHOD.
+  METHOD build_field_cat.
+
+    DATA: li_dropdown TYPE lvc_t_drop,
+          lw_dropdown TYPE lvc_s_drop.
+
+    CONSTANTS: lc_system     TYPE zgscm_insp_type VALUE 'SYSTEM',
+               lc_manual     TYPE zgscm_insp_type VALUE 'MANUAL',
+               lc_struc_name TYPE tabname VALUE 'ZGSCM_REVIEW_LABELS',
+               lc_left       TYPE char01 VALUE 'L',
+               lc_18         TYPE i VALUE 18.
+
+*   Building fieldcatalog of ALV based on structre ZGSCM_REVIEW_LABELS
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = lc_struc_name
+      CHANGING
+        ct_fieldcat            = ct_fcatalog
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+
+    IF sy-subrc = 0.
+*   Drop down entries for the inspection method
+      lw_dropdown-handle  = 1.
+      lw_dropdown-value   = lc_system.
+      APPEND lw_dropdown TO li_dropdown.
+      lw_dropdown-handle  = 1.
+      lw_dropdown-value   = lc_manual.
+      APPEND lw_dropdown TO li_dropdown.
+*   Drop down entries for Rev. level
+      lw_dropdown-handle  = 2.
+      lw_dropdown-value   = 1.
+      APPEND lw_dropdown TO li_dropdown.
+      lw_dropdown-handle  = 2.
+      lw_dropdown-value   = 2.
+      APPEND lw_dropdown TO li_dropdown.
+
+
+      LOOP AT ct_fcatalog ASSIGNING FIELD-SYMBOL(<lw_fcat>).
+
+        CASE <lw_fcat>-fieldname.
+          WHEN 'PRTORDER'.
+            <lw_fcat>-no_out     = abap_true.
+          WHEN 'REV_LEVEL' .
+            <lw_fcat>-col_pos    =  2.
+            <lw_fcat>-drdn_hndl  = 2.
+            <lw_fcat>-reptext    = TEXT-014.
+            <lw_fcat>-outputlen  = 10.
+            <lw_fcat>-edit       = abap_true.
+            <lw_fcat>-just       = lc_left.
+          WHEN 'REV_USER'.
+            <lw_fcat>-reptext    = TEXT-015.
+            <lw_fcat>-col_pos    = 3.
+          WHEN 'ROLL_FROM' OR 'ROLL_TO'.
+            <lw_fcat>-edit       = abap_true.
+            <lw_fcat>-just       = lc_left.
+          WHEN 'ROLL_NO' .
+            <lw_fcat>-no_out     = abap_true.
+          WHEN 'ROLL_NOS' .
+            <lw_fcat>-reptext    = 'Roll No.s'(016).
+            <lw_fcat>-scrtext_m  = TEXT-016.
+            <lw_fcat>-icon       = abap_true.
+            <lw_fcat>-outputlen  = 10.
+            <lw_fcat>-just       = lc_left.
+          WHEN 'REV_ROLLS' .
+            <lw_fcat>-reptext    = TEXT-017.
+            <lw_fcat>-outputlen  = lc_18.
+            <lw_fcat>-just       = lc_left.
+          WHEN 'INSP_TYP' .
+*  Set your dropdown field editable and assign the fieldname of the
+*   corresponding additional field to DRDN_FIELD of the fieldcatalog.
+            <lw_fcat>-edit       = abap_true.
+            <lw_fcat>-drdn_hndl  = 1.
+            <lw_fcat>-reptext    = TEXT-018.
+            <lw_fcat>-outputlen  = lc_18.
+          WHEN 'REV_DATE' .
+            <lw_fcat>-scrtext_l  = TEXT-019.
+            <lw_fcat>-scrtext_m  = TEXT-019.
+            <lw_fcat>-reptext    = TEXT-019.
+            <lw_fcat>-outputlen  = 10.
+          WHEN 'REV_TIME' .
+            <lw_fcat>-reptext    = TEXT-020.
+            <lw_fcat>-scrtext_s  = TEXT-020.
+            <lw_fcat>-scrtext_m  = TEXT-020.
+            <lw_fcat>-scrtext_l  = TEXT-020.
+            <lw_fcat>-outputlen  = 10.
+          WHEN 'LTEXT_ICON'.
+            <lw_fcat>-reptext    = TEXT-021.
+            <lw_fcat>-outputlen  = 10.
+            <lw_fcat>-icon       = abap_true.
+            <lw_fcat>-just       = lc_left.
+          WHEN 'DELTA_ROW_ID'.
+            <lw_fcat>-no_out     = abap_true.
+
+        ENDCASE.
+      ENDLOOP.
+    ENDIF.
+* Pass the dropdown table entries
+    CALL METHOD o_grid->set_drop_down_table(
+      EXPORTING
+        it_drop_down = li_dropdown ).
+  ENDMETHOD.
+  METHOD exclude_functions.
+    DATA: lw_exclude TYPE ui_func.
+
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_detail.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_print.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_refresh.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_print.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_check.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_graph.
+    APPEND lw_exclude TO ct_exclude.
+    lw_exclude = cl_gui_alv_grid=>mc_fc_info.
+    APPEND lw_exclude TO ct_exclude.
+
+  ENDMETHOD.
+  METHOD get_data.
+*   Internal table Declarations
+    DATA: li_data    TYPE STANDARD TABLE OF  zgscm_review_log,
+          li_celltab TYPE lvc_t_styl.
+*   Work area Declarations
+    DATA: lw_data    TYPE zgscm_review_log,
+          lw_outtab  TYPE zgscm_review_labels,
+          lw_celltab TYPE lvc_s_styl.
+*   Variables
+    DATA: l_index TYPE i,
+          l_mode  TYPE raw4.
+
+*   Fetch the data from ZGSCM_REVIEW_LOG table for Printorder.
+*   As PBO triggers after PAI processing, fetching logic
+*   executes again reintializes the data with database
+*   entries, to avoid that flag is set to process
+*   fetching logic only for the first time of execution
+    IF  g_flag IS INITIAL.
+      SELECT * FROM zgscm_review_log INTO TABLE li_data
+          WHERE prtorder = s_prord-low
+            ORDER BY PRIMARY KEY.
+
+*  Passing the fetched data from table to the
+*  output table of the ALV grid.
+      IF  sy-subrc EQ 0.
+        LOOP AT li_data INTO lw_data.
+*  Pass the data to lw_outtab to update into the database table
+          CLEAR: lw_outtab.
+          lw_outtab-prtorder   = lw_data-prtorder.
+          lw_outtab-rev_level  = lw_data-rev_level.
+          lw_outtab-roll_from  = lw_data-roll_from.
+          lw_outtab-roll_to    = lw_data-roll_to.
+          lw_outtab-rev_user   = lw_data-rev_user .
+          lw_outtab-rev_rolls  = lw_data-rev_rolls .
+          lw_outtab-insp_typ   = lw_data-insp_typ.
+          lw_outtab-status     = lw_data-status .
+          lw_outtab-rev_date   = lw_data-rev_date .
+          lw_outtab-rev_time   = lw_data-rev_time .
+          APPEND lw_outtab TO ct_outtab .
+          CLEAR: lw_data,
+                 lw_outtab.
+        ENDLOOP.
+*   Style to be set for the entries based on the Review status,
+*   such that entries should be non-editable if the review status
+*   is IN PROGRESS or COMPLETED.
+        LOOP AT ct_outtab INTO lw_outtab.
+          IF lw_outtab-status EQ c_comp OR
+            lw_outtab-status EQ c_in_prg.
+            l_index = sy-tabix.
+*   The below logic sets the style of columns 'Review_level',
+*   'Roll From' and 'Roll_toeditable for only new rows and
+*   disabled for the existing rows in table.
+            IF lw_outtab-celltab IS INITIAL.
+              REFRESH li_celltab.
+
+              l_mode = cl_gui_alv_grid=>mc_style_disabled.
+
+              lw_celltab-fieldname = c_rev_lev.
+              lw_celltab-style = l_mode.
+              INSERT lw_celltab INTO TABLE li_celltab.
+              lw_celltab-fieldname = c_roll_from.
+              lw_celltab-style = l_mode.
+              INSERT lw_celltab INTO TABLE li_celltab.
+              lw_celltab-fieldname = c_roll_to.
+              lw_celltab-style = l_mode.
+              INSERT lw_celltab INTO TABLE li_celltab.
+              lw_celltab-fieldname = c_status.
+              lw_celltab-style = l_mode.
+              lw_celltab-fieldname = c_ins_type.
+              lw_celltab-style = l_mode.
+
+              INSERT lw_celltab INTO TABLE li_celltab.
+
+              INSERT LINES OF li_celltab INTO TABLE lw_outtab-celltab.
+            ENDIF.
+*   The Display text icon is displayed if the status is COMPLETED.
+            IF lw_outtab-status EQ c_comp.
+              lw_outtab-ltext_icon = icon_display_text.
+            ELSE.
+*   The Change text icon is displayed if the status is IN PROGRESS.
+              lw_outtab-ltext_icon = icon_change_text.
+            ENDIF.
+*  Document Icon is displayed for the Roll No's Column.
+            lw_outtab-roll_nos = icon_document.
+*   Modify the output table with the update styles.
+            MODIFY ct_outtab FROM lw_outtab INDEX l_index.
+
+          ENDIF.
+          CLEAR : lw_outtab.
+
+        ENDLOOP.
+
+      ENDIF.
+      g_flag = abap_true.
+
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD start_review.
+    DATA: li_rows        TYPE lvc_t_row,
+          li_celltab     TYPE lvc_t_styl,
+          li_output      TYPE STANDARD TABLE OF zgscm_review_labels,
+          li_rolls_range TYPE STANDARD TABLE OF ty_rolls_range,
+          lw_rows        TYPE lvc_s_row,
+          lw_output      TYPE zgscm_review_log,
+          lw_data        TYPE zgscm_review_labels,
+          lw_rolls_range TYPE  ty_rolls_range,
+          lw_error       TYPE ty_error_log,
+          lw_celltab     TYPE lvc_s_styl.
+
+    DATA: l_error            TYPE char01,
+          l_user_err         TYPE char01,
+          l_val_miss         TYPE char01,
+          l_err_in_data      TYPE char01,
+          l_lock_err         TYPE char01,
+          l_user             TYPE sy-uname,
+          l_message          TYPE string,
+          l_str              TYPE string,
+          l_index(4)         TYPE n,
+          l_roll_from_int(6) TYPE n,
+          l_roll_to_int(6)   TYPE n,
+          l_lines            TYPE i,
+          l_mode             TYPE raw4.
+
+    FIELD-SYMBOLS: <lfs_change_output> TYPE zgscm_review_labels.
+    CONSTANTS: lc_sem_col TYPE char01 VALUE ';'.
+
+*  Check If Error exists, before performing Review.
+*  If exists, then read the entry from the error log
+*  table i_error_log and display relevant message that
+*  is stored in the error log table
+    IF g_error_in_data IS NOT INITIAL.
+
+      li_output = i_output.
+
+      SORT li_output BY rev_level
+       roll_from
+       roll_to
+       delta_row_id.
+
+      LOOP AT i_error_log INTO lw_error.
+
+        READ TABLE li_output INTO lw_data
+                   WITH KEY rev_level = lw_error-rev_level
+                            roll_from = lw_error-roll_from
+                            roll_to = lw_error-roll_to
+                           delta_row_id = lw_error-row_id
+                           BINARY SEARCH.
+
+        IF sy-subrc EQ 0.
+
+          l_index = lw_data-delta_row_id.
+
+          SHIFT l_index LEFT DELETING LEADING c_zero.
+*  delta_row_id field retains the original row index even
+*  if any rows are deleted, so check if the row_id in the
+*  error log is equal to the value of delta_row_id field value
+*  if equals then trigger the error message
+          IF  lw_error-row_id EQ lw_data-delta_row_id.
+*  If the error is found then set the l_error varaible to avoid
+*  further processing
+            l_err_in_data = abap_true.
+
+            CONCATENATE 'Row'(043) l_index lc_sem_col lw_error-message lw_error-message1
+                           INTO l_str SEPARATED BY space.
+
+            MESSAGE  l_str TYPE c_i DISPLAY LIKE c_e.
+
+          ENDIF.
+        ENDIF.
+        CLEAR lw_data.
+      ENDLOOP.
+    ENDIF.
+
+*  If there is no inconsistency exists then further execution is proceeded,
+*  if l_err_in_data value is blank
+    IF l_err_in_data IS INITIAL.
+
+*  Pass the i_output table to the internal table li_output.
+      REFRESH: li_output.
+      li_output[] = i_output[].
+      SORT   li_output BY rev_level roll_from roll_to status.
+*  Get the selected Rows by calling method GET_SELECTED_ROWS
+*  and imports  the selected rows in the table li_rows
+      CALL METHOD o_grid->get_selected_rows
+        IMPORTING
+          et_index_rows = li_rows.
+
+*  If row is not selected then trigger error message
+      IF li_rows IS INITIAL.
+        MESSAGE 'Please select atleast one row'(002)
+                       TYPE c_i DISPLAY LIKE c_e.
+      ELSE.
+*  Calculate the number of selected rows
+        l_lines = lines( li_rows ).
+      ENDIF.
+*  Review should be performed by only selecting one row at once
+      IF l_lines = 1.
+        READ TABLE  li_rows INTO lw_rows INDEX 1.
+
+        IF sy-subrc EQ 0.
+
+          READ TABLE i_output ASSIGNING <lfs_change_output>  INDEX lw_rows-index. "#CI_NOORDER
+
+          IF sy-subrc EQ 0.
+*  Validation for fields Review level, Roll from and Roll to, if the
+*  any of the values is not filled then display error message and
+*  set the variable value of l_val_miss as 'X'.
+            IF <lfs_change_output>-rev_level IS INITIAL.
+              l_message = TEXT-003.
+              l_val_miss = abap_true.
+            ELSEIF <lfs_change_output>-roll_from IS INITIAL.
+              l_message = TEXT-004.
+              l_val_miss = abap_true.
+            ELSEIF <lfs_change_output>-roll_to IS INITIAL.
+              l_message = TEXT-005.
+              l_val_miss = abap_true.
+            ENDIF.
+*  Validation if tries to start review with the values exists in Review level,
+*  Roll from and Roll to fields, then check for the status, as START REVIEW
+*  must be performed for only Rolls of Review Status 'NOT STARTED'
+            IF l_val_miss IS INITIAL.
+              IF <lfs_change_output>-status = c_not_strt.
+*  Check if the inspection method field exists before performing START REVIEW
+                IF <lfs_change_output>-insp_typ IS NOT INITIAL.
+*  Validation for review level 2, if no review level 1 entry exists with completed status
+                  IF <lfs_change_output>-rev_level EQ c_2.
+
+                    READ TABLE li_output INTO lw_data WITH KEY
+                                                               rev_level = c_1
+                                                               roll_from = <lfs_change_output>-roll_from
+                                                               roll_to   = <lfs_change_output>-roll_to
+                                                               status    = c_comp
+                                                               BINARY SEARCH.
+                    IF sy-subrc NE 0.
+*    Check the Roll values in between Roll From and Roll To are in Completed status for Rev. level 1
+*    UPDATE_ROLLS_RANGE method is used to update the status of the individual rolls
+                      CALL METHOD me->update_rolls_range( ).
+
+                      l_roll_from_int = <lfs_change_output>-roll_from.
+                      li_rolls_range[] = i_rolls_range[].
+                      SORT li_rolls_range BY rev_level rolls status.
+                      READ TABLE li_rolls_range TRANSPORTING NO FIELDS WITH KEY
+                                                                      rev_level = c_1
+                                                                      rolls     = l_roll_from_int
+                                                                       status    = c_comp
+                                                                       BINARY SEARCH.
+                      IF sy-subrc EQ 0.
+*   If Roll No. in 'Roll From' is completed then check for 'Roll To' is in
+*   Completed Status.
+                        l_roll_to_int = <lfs_change_output>-roll_to.
+
+                        READ TABLE li_rolls_range INTO lw_rolls_range WITH KEY
+                                              rev_level = c_1
+                                              rolls     =  l_roll_to_int
+                                              status    = c_comp
+                                              BINARY SEARCH.
+                        IF sy-subrc NE 0.
+                          l_error = abap_true.
+*   If the rolls are found in between roll from and Roll to then check if the same user
+*   is trying to perfrom the both review level 1 and review level 2, if yes then display
+*   error message set the l_user_err variable to restrict the trigger of other error messages
+                        ELSE.
+                          CLEAR: l_user_err.
+                          l_user = sy-uname.
+                          IF l_user EQ lw_rolls_range-user.
+                            MESSAGE 'Review level 1 & 2 cannot be performed by the same user'(027)
+                                           TYPE c_i DISPLAY LIKE c_e.
+                            l_error = abap_true.
+                            l_user_err = abap_true.
+                          ENDIF.
+                        ENDIF.
+                      ELSE.
+                        l_error = abap_true.
+                      ENDIF.
+*   If the completed rolls for review level 1 are found for ROLL_FROM and ROLL_TO values
+*   then check the same user cannot review both review levels for particular rolls
+*   set the l_user_err variable to restrict the trigger of other error messages
+                    ELSE.
+                      CLEAR: l_user_err.
+                      l_user = sy-uname.
+                      IF l_user EQ lw_data-rev_user.
+                        MESSAGE 'Review level 1 & 2 cannot be performed by the same user'(027)
+                                           TYPE c_i DISPLAY LIKE c_e.
+                        l_error = abap_true.
+                        l_user_err = abap_true.
+                      ENDIF.
+                    ENDIF.
+*   Check the l_error is and l_user_err field is blank before triggering message.
+                    IF  l_error = abap_true
+                       AND l_user_err IS INITIAL  .
+                      MESSAGE 'First review is not completed for selected Rolls'(006)
+                                             TYPE c_i
+                                          DISPLAY LIKE c_e.
+                    ENDIF.
+                  ENDIF.
+                ELSE.
+*    Validation if inspection type is not entered
+                  MESSAGE 'Please select Inspection type'(007) TYPE c_i
+                     DISPLAY LIKE c_e.
+                  l_error = abap_true.
+                ENDIF.
+*   Update the table if no error
+                IF l_error IS INITIAL.
+*    If the Rolls are found with completed status of Rev. level 1
+*   then update the status of Rolls as IN PROGRESS for Rev. Level 2
+*   If the Rolls are valid for Rev. level 1,then update the status of
+*   Rolls as IN PROGRESS for Rev. Level 1
+                  <lfs_change_output>-status = c_in_prg. " IN PROGRESS
+                  <lfs_change_output>-rev_date = sy-datum.
+                  <lfs_change_output>-rev_time  = sy-timlo.
+*  Pass the data to lw_output to update into the database table
+                  CLEAR: lw_output.
+                  lw_output-prtorder   = <lfs_change_output>-prtorder.
+                  lw_output-rev_level  = <lfs_change_output>-rev_level.
+                  lw_output-roll_from  = <lfs_change_output>-roll_from.
+                  lw_output-roll_to    = <lfs_change_output>-roll_to.
+                  lw_output-rev_user   = <lfs_change_output>-rev_user .
+                  lw_output-rev_rolls  = <lfs_change_output>-rev_rolls .
+                  lw_output-insp_typ   = <lfs_change_output>-insp_typ.
+                  lw_output-status     = <lfs_change_output>-status .
+                  lw_output-rev_date   = <lfs_change_output>-rev_date .
+                  lw_output-rev_time   = <lfs_change_output>-rev_time .
+
+                  CLEAR l_lock_err.
+*  Lock the entry by calling the ENQUEUE_EZGSCM_REV_ROLLS in the Method
+*  LOCK_DATA and if no error occurs while locking insert the entry
+*  into table ZGSCM_REVIEW_LOG
+                  CALL METHOD me->lock_data(
+                    EXPORTING
+                      i_data  = <lfs_change_output>
+                    IMPORTING
+                      e_error = l_lock_err ).
+
+                  IF  l_lock_err IS INITIAL.
+
+
+                    INSERT zgscm_review_log FROM lw_output.
+*  Display error message if the entry already exists and update the
+*  review status to NOT STARTED and clear review date and time
+                    IF  sy-subrc NE 0.
+
+                      MESSAGE 'Entry already exists in the table'(008)
+                                            TYPE c_i DISPLAY LIKE c_e.
+                      l_lock_err = abap_true.
+*  In case of error exists revert the status to NOT STARTED
+                      <lfs_change_output>-status = c_not_strt. " NOT STARTED
+                      CLEAR:  <lfs_change_output>-rev_date,
+                              <lfs_change_output>-rev_time .
+
+                    ENDIF.
+                  ELSE.
+*  In case of error exists revert the status to NOT STARTED
+*  and clear review date and time.
+                    <lfs_change_output>-status = c_not_strt. " NOT STARTED
+                    CLEAR:  <lfs_change_output>-rev_date,
+                      <lfs_change_output>-rev_time .
+                  ENDIF.
+*  Unlock the entry by calling DEQUEUE_EZGSCM_REV_ROLLS in the method UNLOCK_DATA.
+                  CALL METHOD me->unlock_data( EXPORTING i_data = <lfs_change_output> ).
+
+
+*  The below logic sets the style of columns 'Review_level ', 'Roll From' and Roll_to
+*  editable for only new rows and disabled for the existing rows in table
+                  IF  l_lock_err IS INITIAL.
+                    REFRESH li_celltab.
+
+                    l_mode = cl_gui_alv_grid=>mc_style_disabled.
+
+                    lw_celltab-fieldname = c_rev_lev.
+                    lw_celltab-style = l_mode.
+                    INSERT lw_celltab INTO TABLE li_celltab.
+                    lw_celltab-fieldname = c_roll_from.
+                    lw_celltab-style = l_mode.
+                    INSERT lw_celltab INTO TABLE li_celltab.
+                    lw_celltab-fieldname = c_roll_to.
+                    lw_celltab-style = l_mode.
+                    INSERT lw_celltab INTO TABLE li_celltab.
+                    lw_celltab-fieldname = c_ins_type.
+                    lw_celltab-style = l_mode.
+                    INSERT lw_celltab INTO TABLE li_celltab.
+                    INSERT LINES OF li_celltab INTO TABLE <lfs_change_output>-celltab.
+*  If the Review status for entry is changed to IN PROGRESS then ICON_CHANGE_TEXT is passed
+*  to comments column for that particular entry.
+                    <lfs_change_output>-ltext_icon = icon_change_text.
+                  ENDIF.
+                ENDIF.
+*  If the Review Status of the selected row is 'NOT STARTED' then trigger
+*  Error message
+              ELSE.
+                MESSAGE 'Please select a valid Row with status NOT STARTED'(010)
+                                TYPE c_i DISPLAY LIKE c_e.
+              ENDIF.
+            ELSE.
+              MESSAGE l_message TYPE c_i DISPLAY LIKE c_e.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+*  If more than one row is selected and performed start review
+*  then trigger error message
+      ELSEIF l_lines GT 1.
+        MESSAGE 'Please select only one row to perform review'(011)
+                                           TYPE c_i DISPLAY LIKE c_e.
+      ENDIF.
+
+
+    ENDIF.
+    CLEAR l_err_in_data.
+*  If User clicks on Start Review after click on Insert with Error,
+*  then to delete the row with empty status if there exists
+    DELETE i_output WHERE status IS INITIAL.             "#EC CI_STDSEQ
+*  call refresh_table_display method to refresh the ALV grid with updated values
+    o_grid->refresh_table_display( ).
+*  FREE the container
+    CALL METHOD o_custom_container->free.
+
+    CALL METHOD cl_gui_cfw=>flush.
+  ENDMETHOD.
+
+  METHOD update_review_status.
+
+    TYPES: BEGIN OF lty_rev_rolls,
+             prtorder    TYPE /lmc/ctm_prtorder,
+             rev_level   TYPE zgscm_review_level,
+             total_rolls TYPE i,
+           END OF lty_rev_rolls.
+    TYPES: lty_tt_rev TYPE STANDARD TABLE OF lty_rev_rolls.
+
+    DATA: li_output    TYPE STANDARD TABLE OF zgscm_review_labels,
+          li_sec_rev   TYPE STANDARD TABLE OF zgscm_review_labels,
+          li_rev_rolls TYPE lty_tt_rev.
+
+
+    DATA: lw_rev_rolls TYPE lty_rev_rolls,
+          l_no_manual  TYPE char01.
+
+    CONSTANTS: lc_manual TYPE zgscm_insp_type VALUE 'MANUAL'.
+
+
+*  Initialize the review status
+    IF i_output IS INITIAL.
+
+      g_frst_rev = c_not_strt.
+      g_sec_rev  = c_not_strt.
+      g_rev_sum  = c_not_strt.
+    ENDIF.
+*  Initialize the first review status
+    IF  g_frst_rev IS INITIAL.
+      g_frst_rev = c_not_strt.
+    ENDIF.
+* Initialize the second review status
+    IF g_sec_rev IS INITIAL.
+      g_sec_rev = c_not_strt.
+    ENDIF.
+* Initialize the Review Summary
+    IF   g_rev_sum IS INITIAL.
+      g_rev_sum = c_not_strt.
+    ENDIF.
+
+
+    IF i_output IS NOT INITIAL.
+      li_output = i_output.
+
+* Update First Review
+
+      SORT li_output BY rev_level status.
+
+      READ TABLE li_output TRANSPORTING NO FIELDS  WITH KEY
+                                                  rev_level = c_1
+                                                   status  = c_in_prg
+                                                   BINARY SEARCH.
+*  If atleast one entry with IN PROGRESS exists then update
+*  first review status to IN PROGRESS
+      IF sy-subrc EQ 0 .
+        g_frst_rev = c_in_prg.
+      ELSE.
+*  Check for complete status of first level Review
+*  li_output contains NOT STARTED and COMPLETED status entries
+        READ TABLE li_output TRANSPORTING NO FIELDS WITH KEY
+                                                rev_level = c_1
+                                                status = c_not_strt
+                                                BINARY SEARCH.
+*  If NOT STARTED status doesn't have any entries in li_output
+*  then only Rolls with COMPLETED status exists.
+        IF sy-subrc NE 0.
+*  Fetch the data from review log table to get the total number of
+*  rolls that are reviewed
+          SELECT prtorder
+                 rev_level
+                 SUM( rev_rolls ) AS total_rolls
+                FROM zgscm_review_log
+                INTO TABLE li_rev_rolls
+                 WHERE prtorder = g_prt_order
+                GROUP BY prtorder rev_level.
+
+          IF sy-subrc EQ 0.
+
+            SORT li_rev_rolls BY rev_level.
+
+
+            READ TABLE li_rev_rolls INTO lw_rev_rolls WITH KEY rev_level = c_1
+                                                           BINARY SEARCH.
+
+            IF sy-subrc EQ 0.
+*   If the total Reviewed rolls are equal to the Target quantity of
+*   printed rolls, then set the status of first review to COMPLETED
+*   or else set the status to IN PROGRESS
+              IF g_target_rolls =  lw_rev_rolls-total_rolls.
+
+                g_frst_rev = c_comp.
+
+                SORT li_output BY rev_level insp_typ.
+
+                READ TABLE li_output TRANSPORTING NO FIELDS WITH KEY
+                                                     rev_level = c_1
+                                                     insp_typ = lc_manual
+                                                            BINARY SEARCH.
+*   If for all the Rolls, the inspection type is SYSTEM and Review status
+*   is COMPLETED for Review level 1, then set the second review status to COMPLETED
+                IF sy-subrc NE 0.
+
+                  g_sec_rev = c_comp.
+
+                  l_no_manual = abap_true.
+                ENDIF.
+              ELSE.
+
+                g_frst_rev = c_in_prg.
+
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+*    Update Second Review Status
+      IF l_no_manual IS INITIAL.
+
+        li_sec_rev  = i_output.
+
+        SORT li_sec_rev BY  rev_level.
+*  li_sec_rev contains only entries of Review level 2
+        DELETE li_sec_rev WHERE rev_level = c_1.         "#EC CI_STDSEQ
+
+        SORT li_sec_rev BY  status.
+*  If no records found for Review level 2 then set the second review
+*  status to NOT STARTED
+        IF li_sec_rev IS INITIAL.
+          g_sec_rev = c_not_strt.
+        ELSE.
+          SORT li_sec_rev BY status.
+
+          READ TABLE li_sec_rev TRANSPORTING NO FIELDS WITH KEY
+                                                               status = c_not_strt
+                                                                 BINARY SEARCH.
+*  None of entries are in Not started Status
+          IF sy-subrc NE 0.
+
+            READ TABLE li_sec_rev TRANSPORTING NO FIELDS WITH KEY
+                                                              status =  c_in_prg
+                                                              BINARY SEARCH.
+*  If atleast one entry is found with IN PROGRESS status then set the
+*  second review status to IN PROGRESS.
+            IF sy-subrc EQ 0.
+              g_sec_rev = c_in_prg.
+            ELSE.
+*  If no record is with IN PROGRESS then there are only COMPLETED status entries
+*  Set the Second review status as COMPLETED only if the First Review status is
+*  Completed or else update with IN PROGRESS.
+
+
+              IF g_frst_rev EQ c_comp.
+                CLEAR lw_rev_rolls.
+                READ TABLE li_rev_rolls INTO lw_rev_rolls WITH KEY rev_level = c_2
+                                                                         BINARY SEARCH.
+
+                IF sy-subrc = 0.
+                  IF g_target_rolls  NE lw_rev_rolls-total_rolls.
+                    g_sec_rev = c_in_prg.
+                  ELSE.
+                     g_sec_rev = c_comp.
+                  ENDIF.
+                ENDIF.
+
+              ELSE.
+                g_sec_rev = c_in_prg.
+              ENDIF.
+
+            ENDIF.
+
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+* Update Review Summary
+* If the First Review or Second Review status is IN PROGRESS
+* then update the Review Summary as IN PROGRESS
+    IF g_frst_rev EQ c_in_prg OR
+       g_sec_rev  EQ c_in_prg.
+      g_rev_sum = c_in_prg.
+* If the First Review and Second Review status is COMPLETED
+* then update the Review Summary as COMPLETED
+    ELSEIF g_frst_rev EQ c_comp AND
+           g_sec_rev  EQ c_comp.
+      g_rev_sum = c_comp.
+* If either of First Review or Second Review status is COMPLETED
+* then update the Review Summary as IN PROGRESS
+    ELSEIF g_frst_rev EQ c_comp OR
+           g_sec_rev  EQ c_comp.
+      g_rev_sum = c_in_prg.
+    ENDIF.
+  ENDMETHOD.
+  METHOD complete_review.
+
+    DATA: li_rows   TYPE lvc_t_row,
+          li_output TYPE STANDARD TABLE OF zgscm_review_labels,
+          lw_data   TYPE zgscm_review_labels,
+          lw_error  TYPE ty_error_log,
+          lw_rows   TYPE lvc_s_row.
+
+    DATA: l_error       TYPE char01,
+          l_lock_err    TYPE char01,
+          l_err_in_data TYPE char01,
+          l_index(6)    TYPE n,
+          l_user        TYPE sy-uname,
+          l_lines       TYPE i,
+          l_str         TYPE string.
+
+*    Data declarations for digital signature
+    DATA: li_ds_remarks TYPE sign_remark_tab,
+          lw_ds_meta    TYPE /lsrd/po_ext_es,
+          lw_ds_remark  TYPE sign_remark_struc,
+          l_ds_state    TYPE sign_state,
+          l_signed      TYPE boolean,
+          l_ds_doc      TYPE string.
+
+    FIELD-SYMBOLS: <lfs_change_output> TYPE zgscm_review_labels.
+    CONSTANTS: lc_lsrd_poe TYPE char08 VALUE 'LSRD_POE',
+               lc_sem_col  TYPE char01 VALUE ';'.
+*  Before performing Review, Check If Error exists, 'g_error_in_data'
+*  is set to 'X', If exists, then read the entry from the error log
+*  table i_error_log and display relevant message that
+*  is stored in the error log table
+    IF g_error_in_data IS NOT INITIAL.
+
+      li_output = i_output.
+
+      SORT li_output BY rev_level
+       roll_from
+       roll_to
+       delta_row_id.
+
+      LOOP AT i_error_log INTO lw_error.
+
+        READ TABLE li_output INTO lw_data
+                   WITH KEY rev_level = lw_error-rev_level
+                            roll_from = lw_error-roll_from
+                            roll_to = lw_error-roll_to
+                            delta_row_id = lw_error-row_id
+                            BINARY SEARCH.
+
+        IF sy-subrc EQ 0.
+*  delta_row_id field retains the original row index even
+*  if any rows are deleted, so check if the row_id in the
+*  error log is equal to the value of delta_row_id field value
+*  if equals then trigger the error message
+          l_index = lw_data-delta_row_id.
+          SHIFT l_index LEFT DELETING LEADING c_zero.
+          IF  lw_error-row_id EQ lw_data-delta_row_id.
+            l_err_in_data = abap_true.
+            CONCATENATE 'Row'(043)  l_index lc_sem_col lw_error-message lw_error-message1
+                           INTO l_str SEPARATED BY space.
+            MESSAGE  l_str TYPE c_i DISPLAY LIKE c_e.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+*  If there is no inconsistency exists then further execution is proceeded,
+*   if l_err_in_data value is blank
+    IF l_err_in_data IS INITIAL.
+
+*  Get the selected Rows by calling method GET_SELECTED_ROWS
+*  and imports  the selected rows in the table li_rows
+      CALL METHOD o_grid->get_selected_rows
+        IMPORTING
+          et_index_rows = li_rows.
+
+*  If selected rows are not found then trigger error message
+      IF li_rows IS INITIAL.
+
+        MESSAGE TEXT-002 TYPE c_i DISPLAY LIKE c_e.
+        l_error = abap_true.
+      ELSE.
+*  Calculate the number of selected rows
+        l_lines = lines( li_rows ).
+      ENDIF.
+*  Review should be performed by only selecting one row at once
+      IF l_lines EQ 1.
+
+        READ TABLE  li_rows INTO lw_rows INDEX 1.
+*
+        IF sy-subrc EQ 0.
+
+
+          READ TABLE i_output ASSIGNING <lfs_change_output>  INDEX lw_rows-index.
+*  If the data is found from the i_output table based on selected row index,
+*  then check if the selected entry review status is IN PROGRESS, if not then
+*  trigger the error message and set the error variable l_error to value 'X'.
+          IF sy-subrc EQ 0.
+
+            IF <lfs_change_output>-status NE c_in_prg.
+              MESSAGE 'Please select a valid row with status IN PROGRESS'(023)
+                                                TYPE c_i DISPLAY LIKE c_e.
+              l_error = abap_true.
+            ENDIF.
+*  If the error flag l_error is blank then check whether the User who started
+*  the review is same as the user who does complete review, If the users are
+*  different then trigger error message and set the value of l_error to 'X'.
+            IF l_error IS INITIAL.
+              l_user = sy-uname.
+              IF <lfs_change_output>-rev_user NE l_user.
+                MESSAGE 'User who started review can only complete review'(024)
+                                                 TYPE c_i DISPLAY LIKE c_e.
+                l_error = abap_true.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+*  If more than one row is selected and performed complete review
+*  then trigger error message
+      ELSEIF l_lines GT 1.
+        MESSAGE 'Please select only one row to perform review'(011) TYPE c_i
+                                                               DISPLAY LIKE c_e.
+        l_error = abap_true.
+      ENDIF.
+*  If no error is found and the data is consistent then perform Digital signature
+      IF l_error IS INITIAL.
+        l_ds_doc = 'Printed Label Review'(025).
+*  Pass the meta data username, date and time
+        lw_ds_meta-aenam = sy-uname.
+        lw_ds_meta-aedat = sy-datum.
+        lw_ds_meta-aezet = sy-uzeit.
+* Call the method sign( ) from the class /LSRD/CL_DS
+*  check if signature is performed successfully
+        TRY.
+            /lsrd/cl_ds=>sign(
+              EXPORTING
+                iv_appl       = /lsrd/cl_ds=>mc_ds_application_lsrd
+                iv_object     = lc_lsrd_poe
+                is_meta       = lw_ds_meta
+                iv_strategy   = lc_lsrd_poe
+                iv_doc_txt    = l_ds_doc
+                it_remarks    = li_ds_remarks
+              IMPORTING
+                es_sel_remark = lw_ds_remark
+                ev_sign_state = l_ds_state ).
+            IF l_ds_state = 1.
+              l_signed = abap_true.
+            ENDIF.
+          CATCH /lsrd/cx_error .
+            CLEAR l_signed.
+            IF lw_ds_remark IS NOT INITIAL .
+              CLEAR lw_ds_remark.
+            ENDIF.
+
+        ENDTRY.
+* If signature is performed successfully then lock the entry
+* and update into database table
+        IF l_signed = abap_true.
+
+
+          CLEAR l_lock_err.
+*  Lock the entry by calling the ENQUEUE_EZGSCM_REV_ROLLS in the Method
+*  LOCK_DATA( )
+          me->lock_data( EXPORTING i_data = <lfs_change_output>
+                         IMPORTING e_error = l_lock_err ).
+
+          IF  l_lock_err IS INITIAL.
+*  if no error occurs while locking then update the entry
+*  with status COMPLETED, REV_USER with current user, REV_DATE
+*  with system date and REV_TIME with system time into table ZGSCM_REVIEW_LOG
+            UPDATE zgscm_review_log SET
+                      rev_user = sy-uname
+                      rev_date  = sy-datum
+                      rev_time  = sy-timlo
+                      status    = c_comp
+               WHERE prtorder = g_prt_order
+                AND  rev_level = <lfs_change_output>-rev_level
+                AND  roll_from = <lfs_change_output>-roll_from
+                AND roll_to    = <lfs_change_output>-roll_to.
+*  If there is no entry in table then trigger error message
+            IF  sy-subrc NE 0.
+
+              MESSAGE 'Entry doesnot exists in the table'(026)
+                                           TYPE c_i DISPLAY LIKE c_e.
+
+            ELSE.
+*   Update the field values in the i_output table
+              <lfs_change_output>-status = c_comp. "Completed
+              <lfs_change_output>-rev_date = sy-datum.
+              <lfs_change_output>-rev_time  = sy-timlo.
+              <lfs_change_output>-ltext_icon = icon_display_text.
+
+            ENDIF.
+
+          ENDIF.
+*  Unlock the entry by calling DEQUEUE_EZGSCM_REV_ROLLS in the method UNLOCK_DATA.
+          me->unlock_data( EXPORTING i_data = <lfs_change_output> ).
+
+*          sy-subrc handling
+
+        ENDIF.
+
+      ENDIF.
+
+    ENDIF.
+*  If User clicks on Complete Review after click on Insert with Error,
+*  then to delete the empty row
+
+    DELETE i_output WHERE status IS INITIAL.             "#EC CI_STDSEQ
+*  call refresh_table_display method to refresh the ALV grid with updated values
+    o_grid->refresh_table_display( ).
+* Free the contianer
+    CALL METHOD o_custom_container->free.
+
+    CALL METHOD cl_gui_cfw=>flush.
+  ENDMETHOD.
+  METHOD refresh_data.
+    DATA: li_data      TYPE STANDARD TABLE OF zgscm_review_log,
+          li_print_log TYPE STANDARD TABLE OF zgscm_print_log,
+          lw_data      TYPE  zgscm_review_log,
+          lw_output    TYPE zgscm_review_labels.
+
+*  After Refresh fetch the data from the print log table
+*  to get the update data ( actual printed rolls ).
+    SELECT * FROM zgscm_print_log INTO TABLE li_print_log
+                WHERE exec_prtorder = g_prt_order
+                   AND prtd_sample_rolls = 0
+                   AND printd_rolls <> 0.              "#EC CI_NOFIELD
+    IF sy-subrc EQ 0.
+      REFRESH i_print_data.
+      i_print_data[] = li_print_log[].
+*  If data is not found then fetch the data by passing the order
+*  to the prtorder field
+    ELSE.
+      SELECT * FROM zgscm_print_log INTO TABLE li_print_log
+       WHERE  prtorder = g_prt_order
+         AND prtd_sample_rolls = 0
+        AND printd_rolls <> 0.
+      IF sy-subrc EQ 0.
+        REFRESH i_print_data.
+        i_print_data[] = li_print_log[].
+      ENDIF.
+    ENDIF.
+*  After Refresh get the updated data from the table
+    SELECT * FROM zgscm_review_log INTO TABLE li_data
+          WHERE prtorder = g_prt_order.
+
+*  Pass the fetched data to the ALV output table
+
+    IF sy-subrc EQ 0.
+      REFRESH: i_output.
+      LOOP AT li_data INTO lw_data.
+*  Pass the data to lw_output
+        CLEAR: lw_output.
+        lw_output-prtorder   = lw_data-prtorder.
+        lw_output-rev_level  = lw_data-rev_level.
+        lw_output-roll_from  = lw_data-roll_from.
+        lw_output-roll_to    = lw_data-roll_to.
+        lw_output-rev_user   = lw_data-rev_user .
+        lw_output-rev_rolls  = lw_data-rev_rolls .
+        lw_output-insp_typ   = lw_data-insp_typ.
+        lw_output-status     = lw_data-status .
+        lw_output-rev_date   = lw_data-rev_date .
+        lw_output-rev_time   = lw_data-rev_time .
+*  Document Icon is displayed for the Roll No's Column.
+        lw_output-roll_nos = icon_document.
+*   The Display text icon is displayed if the status is COMPLETED.
+        IF lw_data-status EQ c_comp.
+          lw_output-ltext_icon = icon_display_text.
+        ELSE.
+*   The Change text icon is displayed if the status is IN PROGRESS.
+          lw_output-ltext_icon = icon_change_text.
+        ENDIF.
+        APPEND lw_output TO i_output .
+        CLEAR: lw_data,
+               lw_output.
+      ENDLOOP.
+    ENDIF.
+
+
+
+    o_grid->refresh_table_display( ).
+
+    CALL METHOD o_custom_container->free.
+
+    CALL METHOD cl_gui_cfw=>flush.
+  ENDMETHOD.
+  METHOD update_rolls_range.
+    DATA: lw_output      TYPE zgscm_review_labels.
+    DATA: l_roll_from_int(6) TYPE n,
+          l_roll_to_int(6)   TYPE n.
+
+    FIELD-SYMBOLS: <lfs_rolls_range> TYPE ty_rolls_range.
+
+*   Rolls must be updated with the latest review status
+*   to compare the status with Review level 1 and
+*   proceed for Review level 2
+    LOOP AT  i_output INTO lw_output.
+
+      IF lw_output-rev_level EQ c_1.
+
+
+        l_roll_from_int = lw_output-roll_from.
+        l_roll_to_int = lw_output-roll_to.
+*  i_rolls_range consists of individual rolls, so check
+*  each roll whether it is equal/lies in between Roll from
+*  Roll to values.
+        LOOP AT  i_rolls_range ASSIGNING <lfs_rolls_range>.
+
+
+          IF  ( <lfs_rolls_range>-rolls EQ l_roll_from_int
+              OR
+               <lfs_rolls_range>-rolls EQ l_roll_to_int
+              OR
+               <lfs_rolls_range>-rolls BETWEEN l_roll_from_int AND l_roll_to_int ).
+*  Update the Review status
+            IF  <lfs_rolls_range>-status NE lw_output-status.
+              <lfs_rolls_range>-status = lw_output-status.
+            ENDIF.
+*  Update the Reviewed User
+            IF  <lfs_rolls_range>-user NE lw_output-rev_user.
+              <lfs_rolls_range>-user = lw_output-rev_user.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+      CLEAR lw_output.
+    ENDLOOP.
+  ENDMETHOD.
+  METHOD update_roll_no.
+    DATA: li_print_data    TYPE  ty_tt_print,
+          lw_print_log     TYPE zgscm_print_log,
+          l_rolls_per_line TYPE i,
+          l_curr_roll(6)   TYPE n,
+          l_roll_no        TYPE string.
+
+* Calculates the Actual & Target print Quantity of Rolls
+* from the entries fetched form the table ZGSCM_PRINT_LOG
+    IF i_print_data IS NOT INITIAL.
+
+      li_print_data[] = i_print_data[].
+
+      LOOP AT li_print_data INTO lw_print_log.
+*  Update the Print order on to the screen field
+        IF  g_prt_order IS INITIAL.
+          IF g_prt IS NOT INITIAL .
+            g_prt_order = lw_print_log-prtorder.            "Print Order
+          ELSE.
+            g_prt_order = lw_print_log-exec_prtorder.      "Executed Print Order
+          ENDIF.
+
+        ENDIF.
+*  Update the Target Quantity of Rolls on to the screen field
+        IF g_target_rolls IS INITIAL.
+          g_target_rolls = lw_print_log-trgt_qty. " Target Quantity of Rolls
+        ENDIF.
+*  Actual print rolls is calculated by calculating the sum
+*  of  printed rolls present in all entries for particular print order
+        CLEAR: l_rolls_per_line,
+               l_curr_roll.
+        l_rolls_per_line = lw_print_log-roll_to - lw_print_log-roll_from + 1.
+        l_curr_roll = lw_print_log-roll_from.
+*  RollNo's are calculated and stored in table I_PRINT_ROLLS
+*  to validate if the user enters Roll No's out of this range
+        IF l_curr_roll IS NOT INITIAL.
+          DO l_rolls_per_line TIMES.
+            CONCATENATE l_roll_no l_curr_roll  INTO l_roll_no SEPARATED BY c_comma.
+            l_curr_roll = l_curr_roll + 1.
+            SHIFT l_roll_no LEFT DELETING LEADING c_comma.
+          ENDDO.
+        ENDIF.
+
+      ENDLOOP.
+
+      CONDENSE l_roll_no.
+*  Actual printed Roll No's are stored in table I_PRINT_ROLLS
+      SPLIT l_roll_no AT c_comma INTO TABLE i_print_rolls.
+      SORT i_print_rolls BY rolls.
+      DELETE ADJACENT DUPLICATES FROM i_print_rolls COMPARING rolls.
+*  Update the Actual Quantity of Rolls on to the screen field
+      g_act_rolls = lines( i_print_rolls ).   "Actual Printed Rolls
+    ENDIF.
+
+  ENDMETHOD.
+  METHOD lock_data.
+    DATA: l_text TYPE string.
+    DATA: l_user TYPE string.
+    CLEAR e_error.
+    CALL FUNCTION 'ENQUEUE_EZGSCM_REV_ROLLS'
+      EXPORTING
+        mode_zgscm_review_log = c_e
+        mandt                 = sy-mandt
+        prtorder              = i_data-prtorder
+        rev_level             = i_data-rev_level
+        roll_from             = i_data-roll_from
+        roll_to               = i_data-roll_to
+      EXCEPTIONS
+        foreign_lock          = 1
+        system_failure        = 2
+        OTHERS                = 3.
+    IF sy-subrc <> 0.
+      l_user = sy-msgv1.
+      l_text = TEXT-009.
+      REPLACE '&1' WITH l_user INTO l_text.
+      MESSAGE l_text  TYPE c_s DISPLAY LIKE c_e.
+      e_error  = abap_true.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD unlock_data.
+
+    CALL FUNCTION 'DEQUEUE_EZGSCM_REV_ROLLS'
+      EXPORTING
+        mode_zgscm_review_log = c_e
+        mandt                 = sy-mandt
+        prtorder              = i_data-prtorder
+        rev_level             = i_data-rev_level
+        roll_from             = i_data-roll_from
+        roll_to               = i_data-roll_to.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS lcl_events IMPLEMENTATION.
+  METHOD object_inst.
+* Create instance for class lcl_events
+    IF  o_events IS NOT BOUND .
+      CREATE OBJECT o_events.
+    ENDIF.
+* Create instance for class lcl_review
+    IF  o_review IS NOT BOUND.
+      CREATE OBJECT o_review.
+    ENDIF.
+  ENDMETHOD.
+  METHOD on_start_of_selec.
+* Fetch the data from ZGSCM_PRINT_LOG table by passsing input to EXEC_PRTORDER field
+    SELECT * FROM zgscm_print_log
+                    INTO TABLE ct_prt_ord_data
+                         WHERE exec_prtorder = s_prord-low
+                            AND prtd_sample_rolls = 0
+                            AND printd_rolls <> 0.            "#EC CI_NOFIELD
+
+    IF sy-subrc NE 0.
+* If data is not found then fetch the data ZGSCM_PRINT_LOG table by passsing
+* input to PRTORDER field
+      SELECT * FROM zgscm_print_log
+                       INTO TABLE ct_prt_ord_data
+                            WHERE prtorder = s_prord-low
+                                AND prtd_sample_rolls = 0
+                                AND printd_rolls <> 0.
+* If data is found then set the g_prt variable to 'X'
+      IF sy-subrc EQ 0.
+        g_prt = abap_true.
+      ENDIF.
+    ENDIF.
+
+* If no data is found then display error message
+    IF ct_prt_ord_data IS  INITIAL.
+      MESSAGE TEXT-001 TYPE c_s DISPLAY LIKE c_e.
+    ELSE.
+* If data is found then call review screen
+      CALL SCREEN 9000.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD handle_toolbar.
+
+    DATA:lw_toolbar  TYPE stb_button.
+
+*   Function to toggle EDIT to Display mode and
+*   viceversa is added to the ALV toolbar.
+    lw_toolbar-function = c_disp_chg.
+    lw_toolbar-icon = icon_toggle_display_change.
+    lw_toolbar-butn_type = 0.
+    lw_toolbar-quickinfo = 'Edit<->Change'(040).
+    APPEND lw_toolbar TO e_object->mt_toolbar.
+    CLEAR lw_toolbar.
+*   Changes to be done to the Insert and Delete buttons
+*   of the ALV toolbar.
+    LOOP AT e_object->mt_toolbar INTO lw_toolbar.
+      CASE lw_toolbar-function.
+        WHEN cl_gui_alv_grid=>mc_fc_loc_append_row.
+*   As the Insert row function insert row at first row
+*   the append row function is used by changing the icon
+*   icon_insert_row
+          lw_toolbar-icon = icon_insert_row.
+          MODIFY e_object->mt_toolbar FROM lw_toolbar INDEX sy-tabix.
+*  Custom functionality for the Delete function to be
+*  implemented by changing the function of Delete button
+        WHEN cl_gui_alv_grid=>mc_fc_loc_delete_row.
+          lw_toolbar-function = c_delete.
+          MODIFY e_object->mt_toolbar FROM lw_toolbar INDEX sy-tabix.
+      ENDCASE.
+      CLEAR lw_toolbar.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+
+    DATA: li_rows     TYPE lvc_t_row,
+          li_del_rows TYPE ty_tt_output.
+
+    DATA: lw_rows    TYPE lvc_s_row,
+          lw_rev_tab TYPE zgscm_review_log,
+          lw_output  TYPE zgscm_review_labels.
+
+    DATA: l_edit          TYPE i,
+          l_object        TYPE thead-tdobject,
+          l_roll_name     TYPE thead-tdname,
+          l_comments_name TYPE thead-tdname,
+          l_lock_err      TYPE flag,
+          l_popup_ret     TYPE n.
+
+
+    FIELD-SYMBOLS: <lfs_del_out> TYPE zgscm_review_labels.
+
+    CONSTANTS:lc_off TYPE char01 VALUE '0',
+              lc_on  TYPE char01 VALUE '1'.
+*   Functionality for the buttons 'Edit<->Display' &
+*   'Delete' buttons on the ALV toolbar
+    CASE e_ucomm.
+      WHEN c_disp_chg.                                      "#EC NOTEXT
+*   On click of 'Edit<->Display' button, if the ALV
+*   grid is in display mode the switch to edit mode
+*   elseif in edit mode then switch to display mode
+        IF o_grid->is_ready_for_input( ) EQ 1.
+          l_edit = lc_off.
+        ELSE.
+          l_edit = lc_on.
+        ENDIF.
+*   ALV grid Display/Edit mode will be set based on l_edit value
+        CALL METHOD o_grid->set_ready_for_input
+          EXPORTING
+            i_ready_for_input = l_edit.
+*   When Delete button is clicked by selecting the rows then
+*   entries with COMPLETED status cannot be deleted.
+      WHEN c_delete.
+*   Get the selected rows by calling the method get_selected_rows
+        CALL METHOD o_grid->get_selected_rows
+          IMPORTING
+            et_index_rows = li_rows.
+*  If rows are not selected then trigger error message
+        IF li_rows IS INITIAL.
+          MESSAGE 'Please select atleast one row'(002)
+                         TYPE c_i DISPLAY LIKE c_e.
+        ELSE.
+*   Loop onto selected rows and check the status for each entry
+
+          LOOP AT li_rows INTO lw_rows.
+
+            READ TABLE i_output ASSIGNING <lfs_del_out> INDEX lw_rows-index.
+
+            IF  sy-subrc EQ 0.
+
+              IF  <lfs_del_out>-status NE c_comp.
+*      Pass the data to lw_rev_tab to update into the database table
+                CLEAR: lw_rev_tab.
+                lw_rev_tab-prtorder   = <lfs_del_out>-prtorder.
+                lw_rev_tab-rev_level  = <lfs_del_out>-rev_level.
+                lw_rev_tab-roll_from  = <lfs_del_out>-roll_from.
+                lw_rev_tab-roll_to    = <lfs_del_out>-roll_to.
+                lw_rev_tab-rev_user   = <lfs_del_out>-rev_user .
+                lw_rev_tab-rev_rolls  = <lfs_del_out>-rev_rolls .
+                lw_rev_tab-insp_typ   = <lfs_del_out>-insp_typ.
+                lw_rev_tab-status     = <lfs_del_out>-status .
+                lw_rev_tab-rev_date   = <lfs_del_out>-rev_date .
+                lw_rev_tab-rev_time   = <lfs_del_out>-rev_time .
+*   If the review status of the selected entry is IN PROGRESS then
+*   display Confirmation popup before deleting the entry of IN PROGRESS
+*   If user clicked on YES button then delete the entry from the ALV
+*   output table as well as from the  ZGSCM_REVIEW_LOG table
+                IF  <lfs_del_out>-status EQ c_in_prg.
+
+                  CALL FUNCTION 'POPUP_TO_CONFIRM'
+                    EXPORTING
+                      titlebar              = 'Confirmation'(013)
+                      text_question         = 'Do you want to delete IN PROGRESS entry ?'(012)
+                      text_button_1         = 'Yes'(041)
+                      text_button_2         = 'No'(042)
+                      default_button        = '2'
+                      display_cancel_button = ' '
+                    IMPORTING
+                      answer                = l_popup_ret " to hold the FM's return value
+                    EXCEPTIONS
+                      text_not_found        = 1
+                      OTHERS                = 2.
+*   If the User clicks on NO button then continue the loop without deletion
+                  IF sy-subrc = 0
+                    AND l_popup_ret EQ 2.
+                    CONTINUE.
+                  ENDIF.
+*   Lock the selected row before performing delete operation
+                  CALL METHOD o_review->lock_data(
+                    EXPORTING
+                      i_data  = <lfs_del_out>
+                    IMPORTING
+                      e_error = l_lock_err ).
+*  If no error was found during locking the row then delete the row from table
+                  IF  l_lock_err IS INITIAL.
+
+                    DELETE zgscm_review_log FROM  lw_rev_tab. "#EC CI_IMUD_NESTED
+
+                    IF sy-subrc NE 0.
+                      MESSAGE 'Entry doesnot exists in the table'(026)
+                                              TYPE c_i DISPLAY LIKE c_e.
+                    ENDIF.
+
+                  ENDIF.
+*  Unlock the row once delete operation is performed
+                  CALL METHOD o_review->unlock_data(
+                    EXPORTING
+                      i_data = <lfs_del_out> ).
+
+                ENDIF.
+
+*  As the row is deleted, the error messages associated to the particular
+*  row are also deleted from the table i_error_log for the entries with
+*  Status IN PROGRESS and NOT STARTED
+                DELETE i_error_log WHERE row_id = lw_rows-index. "#EC CI_STDSEQ
+*  Append the deleted rows to the internal table li_del_rows
+                APPEND <lfs_del_out> TO li_del_rows.
+*  Clear the <lfs_del_out>-status to delete from the table i_output based on empty status
+                CLEAR: <lfs_del_out>-status.
+*  If the selected row is in COMPLETED status then trigger error message and entry
+*  shouldn't be deleted
+              ELSE.
+                MESSAGE 'Review is Completed for selected row and cannot be deleted'(022) TYPE c_i
+                  DISPLAY LIKE c_e.
+              ENDIF.
+            ENDIF.
+            CLEAR: lw_rows.
+          ENDLOOP.
+
+
+*  Delete the rows with not Completed status based on empty status
+
+          DELETE i_output WHERE status IS INITIAL.       "#EC CI_STDSEQ
+*  As the ROLL_NOS and Comments fields are associated with
+*  long text, so the long text also to be deleted from the
+*  database to avoid inconsistency by calling Function
+*  Module DELETE_TEXT. li_del_rows contains the deleted rows
+
+          IF  li_del_rows IS NOT INITIAL.
+
+            LOOP AT li_del_rows INTO lw_output.
+*  Delete long text for review status not equal to NOT STARTED
+              IF lw_output-status NE c_not_strt.
+
+                IF  lw_output-prtorder IS NOT INITIAL AND
+                    lw_output-rev_level  IS NOT INITIAL AND
+                    lw_output-roll_from IS NOT INITIAL AND
+                    lw_output-roll_to IS NOT INITIAL .
+                  CLEAR l_roll_name.
+*  Delete Roll No's Long text
+*  l_roll_name has the text name to be deleted
+                  CONCATENATE  lw_output-prtorder
+                               lw_output-rev_level
+                               lw_output-roll_from
+                               lw_output-roll_to
+                                INTO l_roll_name.
+
+                  l_object = c_lsrd_ctrr.
+*  Call DELETE_TEXT to delete the roll number long text
+                  CALL FUNCTION 'DELETE_TEXT'
+                    EXPORTING
+                      id              = c_id
+                      language        = c_e
+                      name            = l_roll_name
+                      object          = l_object
+                      savemode_direct = c_checked
+                    EXCEPTIONS
+                      not_found       = 1
+                      OTHERS          = 2.
+                  IF sy-subrc <> 0.
+                    CLEAR lw_output.
+                  ENDIF.
+
+*  Delete Comments Long text
+*  Comments long text name
+                  CONCATENATE   c_en
+                                l_roll_name
+                                INTO l_comments_name.
+*  Call DELETE_TEXT to delete the comments long text
+                  CALL FUNCTION 'DELETE_TEXT'
+                    EXPORTING
+                      id              = c_id
+                      language        = c_e
+                      name            = l_comments_name
+                      object          = l_object
+                      savemode_direct = c_checked
+                    EXCEPTIONS
+                      not_found       = 1
+                      OTHERS          = 2.
+                  IF sy-subrc <> 0.
+                    CLEAR l_comments_name.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+              CLEAR lw_output.
+            ENDLOOP.
+
+          ENDIF.
+        ENDIF.
+*  As custom UCOMM is assigned to Delete button the i_ucomm
+*  must be cleared, as attribute M_UCOMM( Stores the delete
+*  function) in the cl_gui_alv_grid remains the same throughout
+*  the execution, so M_UCOMM must be initialized by calling the
+*  set_user_command method by exporting i_ucomm as space.
+        o_grid->set_user_command(
+              EXPORTING
+                i_ucomm = space ).
+*  Refresh the ALV table display to update the changes
+        o_grid->refresh_table_display( ).
+
+    ENDCASE.
+  ENDMETHOD.
+  METHOD handle_data_changed.
+
+*  handle_data_changed is triggered whenever there
+*  is change in the editable cell of the ALV grid
+*  Erro message shouldn't be checked if user clicks
+*  on DELETE button
+    IF e_ucomm NE c_delete.
+      CLEAR : g_error_in_data.
+*   If no standard messages stored in MT_PROTOCOL
+*   then check the error log to display errrors
+      IF er_data_changed->mt_protocol IS INITIAL.
+        CALL METHOD me->check_error_log(
+          EXPORTING
+            ir_data_changed = er_data_changed ).
+      ENDIF.
+*   Validate if there are any duplicate roll no's
+*   exist in the table while entering values in the row
+*  If g_error_in_data is set then there is inconsitency raised from
+*  check_error_log method and further validation is not performed
+      IF g_error_in_data IS INITIAL.
+        CALL METHOD me->check_duplicate_entries(
+          EXPORTING
+            ir_data_changed = er_data_changed ).
+      ENDIF.
+*  The modification of cells, update of default values
+*  when row is inserted and update of Roll No's are
+*  calcaulated in the method 'MODIFY_CELL_VALUES'
+      CALL METHOD me->modify_cell_values(
+        EXPORTING
+          ir_data_changed = er_data_changed ).
+
+*  If the Error exists then display the error message
+*  by calling the method display_protocol
+      IF g_error_in_data IS NOT INITIAL.
+        CALL METHOD er_data_changed->display_protocol( ).
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+  METHOD calc_rolls.
+    DATA : li_tline    TYPE tline_t,
+           li_roll_nos TYPE STANDARD TABLE OF ty_rolls.
+
+    DATA: lw_mod_rows TYPE zgscm_review_labels,
+          lw_roll_nos TYPE ty_rolls,
+          lw_lines    TYPE tline,
+          lw_header   TYPE thead.
+
+    DATA: l_roll_no      TYPE string,
+          l_ltext        TYPE string,
+          l_lines        TYPE i,
+          l_curr_roll(6) TYPE n,
+          l_name         TYPE thead-tdname,
+          l_object       TYPE thead-tdobject.
+
+
+    FIELD-SYMBOLS: <lfs_chg_out> TYPE zgscm_review_labels.
+    FIELD-SYMBOLS: <lfs_mod_rows>   TYPE ty_tt_output.
+
+    CONSTANTS: lc_65 TYPE i VALUE 65.
+*  ir_data_changed->mp_mod_rows->* consists of the current
+*  modified row with current values
+    ASSIGN ir_data_changed->mp_mod_rows->* TO <lfs_mod_rows>.
+
+    READ TABLE <lfs_mod_rows> INTO lw_mod_rows INDEX 1.
+
+    IF sy-subrc EQ 0.
+
+*  Read the current changed value based on the row_id of the good cells
+      READ TABLE i_output ASSIGNING <lfs_chg_out> INDEX i_good-row_id.
+
+      IF sy-subrc EQ 0.
+*  If the changed value is 'ROLL_FROM', then calculate the total rolls
+*  in between Roll_from and Roll_to
+        IF i_good-fieldname = c_roll_from.
+
+          <lfs_chg_out>-roll_to = lw_mod_rows-roll_to.
+
+          IF <lfs_chg_out>-roll_to IS NOT INITIAL.
+*  Total Review rolls are calculated, e_good-value is the Roll_From field value
+            <lfs_chg_out>-rev_rolls = <lfs_chg_out>-roll_to - i_good-value   + 1.
+
+            IF <lfs_chg_out>-rev_rolls < 0 .
+              CLEAR <lfs_chg_out>-rev_rolls.
+            ENDIF.
+*  l_curr_roll is used to calculate roll numbers
+            l_curr_roll = i_good-value.
+
+          ENDIF.
+*  If the changed value is 'ROLL_TO', then calculate the total rolls
+*  in between Roll_from and Roll_to
+        ELSEIF i_good-fieldname = c_roll_to.
+          <lfs_chg_out>-roll_from = lw_mod_rows-roll_from.
+
+          IF <lfs_chg_out>-roll_from IS NOT INITIAL .
+* Total Review rolls are calculated, e_good-value is the Roll_to field value
+            <lfs_chg_out>-rev_rolls = i_good-value - <lfs_chg_out>-roll_from   + 1.
+
+            IF <lfs_chg_out>-rev_rolls < 0 .
+              CLEAR <lfs_chg_out>-rev_rolls.
+            ENDIF.
+
+          ENDIF.
+*  l_curr_roll is used to calculate roll numbers
+          l_curr_roll = <lfs_chg_out>-roll_from.
+        ENDIF.
+*  Roll No's in sequence to be calculated and populated with comma seperator
+        CLEAR l_roll_no.
+*  Loop for total review rolls times and l_curr_roll value is initial roll
+        DO <lfs_chg_out>-rev_rolls TIMES.
+          SHIFT l_curr_roll LEFT DELETING LEADING c_zero.
+          CONCATENATE l_roll_no l_curr_roll  INTO l_roll_no SEPARATED BY c_comma.
+          l_curr_roll = l_curr_roll + 1.
+        ENDDO.
+*  l_roll_no consists of all rolls from 'ROLL_FROM' to 'ROLL_TO' value
+*  with comma seprator, delete comma present infront of first roll
+        SHIFT l_roll_no LEFT DELETING LEADING c_comma.
+*  Pass the Roll No's into table I_ROLL_NOS which will be displayed in long text
+        REFRESH li_roll_nos.
+        SPLIT l_roll_no AT c_comma INTO TABLE li_roll_nos.
+
+        DELETE ADJACENT DUPLICATES FROM li_roll_nos COMPARING rolls.
+
+        CLEAR: l_ltext.
+*  The li_roll_nos entries are used to place the roll no's in long text
+        IF li_roll_nos IS NOT INITIAL.
+
+          CLEAR <lfs_chg_out>-roll_no_ltext.
+*  calculate the number of rolls present and stoer in l_lines
+          l_lines = lines( li_roll_nos ).
+*  loop the roll no's and place it in the longtext field 'ROLL_NO_LTEXT'
+*  with comma seperator for each line only 65 characters are stored to
+*  avoid overflow of the roll numbers to next line
+          LOOP AT li_roll_nos INTO lw_roll_nos.
+            CONCATENATE l_ltext lw_roll_nos INTO l_ltext SEPARATED BY c_comma.
+            SHIFT l_ltext LEFT DELETING LEADING c_comma.
+            IF  strlen( l_ltext ) > lc_65.
+              lw_lines-tdline = l_ltext.
+              lw_lines-tdformat = c_asterisk.
+              APPEND lw_lines TO <lfs_chg_out>-roll_no_ltext.
+              CLEAR l_ltext.
+            ENDIF.
+*  If for the last loop the length of the line is less than or equal to 65
+*  then append the last line to long text field
+            IF  sy-tabix EQ l_lines.
+              IF  strlen( l_ltext ) LE lc_65.
+                lw_lines-tdline = l_ltext.
+                lw_lines-tdformat = c_asterisk.
+                APPEND lw_lines TO <lfs_chg_out>-roll_no_ltext.
+                CLEAR l_ltext.
+              ENDIF.
+            ENDIF.
+            CLEAR lw_roll_nos.
+          ENDLOOP.
+*  If the values iin fields Roll_from and Roll_to is present then save the long text
+          IF lw_mod_rows-roll_from IS NOT INITIAL AND lw_mod_rows-roll_to IS NOT INITIAL .
+*  The unique text name is prepared with the combination of the key fields
+*  Print order, Review level, Roll from and Roll to
+            CONCATENATE g_prt_order
+                        lw_mod_rows-rev_level
+                        lw_mod_rows-roll_from
+                        lw_mod_rows-roll_to
+                        INTO l_name.
+*  Pass the text object as '/LSRD/CTRR'
+            l_object = c_lsrd_ctrr.
+
+            CLEAR lw_header.
+*  Call the function to initialize text work areas
+            CALL FUNCTION 'INIT_TEXT'
+              EXPORTING
+                id       = c_id
+                language = c_e
+                name     = l_name
+                object   = l_object
+              IMPORTING
+                header   = lw_header
+              TABLES
+                lines    = li_tline[]
+              EXCEPTIONS
+                id       = 1
+                language = 2
+                name     = 3
+                object   = 4
+                OTHERS   = 5.
+*  If no error is found while initializing then save Roll No's long text
+            IF sy-subrc EQ 0.
+*   Save the long text that is placed ROLL_NO_LTEXT field by calling
+*   SAVE_TEXT function module
+              CALL FUNCTION 'SAVE_TEXT'
+                EXPORTING
+                  header          = lw_header
+                  insert          = c_checked
+                  savemode_direct = c_checked
+                TABLES
+                  lines           = <lfs_chg_out>-roll_no_ltext
+                EXCEPTIONS
+                  id              = 1
+                  language        = 2
+                  name            = 3
+                  object          = 4
+                  OTHERS          = 5.
+              IF sy-subrc <> 0.
+                CLEAR li_tline.
+              ENDIF.
+            ENDIF.
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+  METHOD check_duplicate_entries.
+
+
+    DATA: li_err_log     TYPE STANDARD TABLE OF ty_error_log,
+          li_rolls_range TYPE STANDARD TABLE OF ty_rolls_range,
+          lw_mod_rows    TYPE zgscm_review_labels,
+          lw_output      TYPE zgscm_review_labels,
+          lw_good        TYPE lvc_s_modi,
+          lw_error_log   TYPE ty_error_log.
+    DATA: l_message      TYPE string,
+          l_message1     TYPE string,
+          l_index        TYPE i,
+          l_lines        TYPE i,
+          l_rev_error    TYPE char01,
+          l_error        TYPE char01,
+          l_fname        TYPE  lvc_fname,
+          l_rolls_int(6) TYPE n,
+          l_roll_frm(6)  TYPE n,
+          l_roll_to(6)   TYPE n.
+
+    FIELD-SYMBOLS: <lfs_mod_rows>   TYPE ty_tt_output,
+                   <lfs_output>     TYPE zgscm_review_labels,
+                   <lfs_chg_output> TYPE zgscm_review_labels.
+
+*  As the duplicate entries in ALV to be checked when there is change
+*  in the Review level or Roll from or Roll to fields but not when
+*  the rows are inserted, so restricting the validation by
+*  checking the mt_inserted_rows
+
+    IF ir_data_changed->mt_inserted_rows IS INITIAL.
+
+
+      ASSIGN ir_data_changed->mp_mod_rows->* TO <lfs_mod_rows>.
+*  The ir_data_changed->mp_mod_rows->* consists of current row
+*  being modified, reading the modified rows with index
+      l_lines = lines( <lfs_mod_rows> ).
+
+      READ TABLE <lfs_mod_rows> INTO lw_mod_rows INDEX l_lines.
+
+      IF sy-subrc EQ 0.
+
+
+*  If the modified row exists then check if there is any change
+*  triggered in the fields 'Rev_level' or 'Roll_from' or 'Roll to'.
+        LOOP AT ir_data_changed->mt_good_cells INTO lw_good .
+
+          IF lw_good-fieldname = c_rev_lev
+          OR lw_good-fieldname = c_roll_from
+          OR lw_good-fieldname = c_roll_to.
+
+            CLEAR l_rolls_int.
+*  if there is any change triggered in the fields 'Rev_level' or 'Roll_from'
+*  or 'Roll to', then read the i_output table with index of the changed row id
+*  of the good cells stored in lw_good-row_id
+            READ TABLE i_output ASSIGNING <lfs_output> INDEX lw_good-row_id.
+
+            IF sy-subrc EQ 0.
+
+*  If the change is done in Roll_from, then check whether the rolls are present
+*  in the table i_print_rolls( which has data fetched from ZGSCM_PRINT_LOG table).
+              IF lw_good-fieldname = c_roll_from
+                AND lw_mod_rows-roll_from IS NOT INITIAL.
+*  Check if the review level is not empty, if review level is not found
+*  then add message to the error log
+                IF lw_mod_rows-rev_level IS INITIAL.
+                  l_message = 'Please Enter Review level'(031).
+                  lw_error_log-row_id   = lw_good-row_id.
+                  lw_error_log-fname   = c_rev_lev.
+                  lw_error_log-rev_level = lw_mod_rows-rev_level.
+                  lw_error_log-roll_from = lw_mod_rows-roll_from.
+                  lw_error_log-roll_to = lw_mod_rows-roll_to.
+                  lw_error_log-message  = l_message.
+                  APPEND lw_error_log TO li_err_log.
+                  CLEAR l_message.
+                  l_rev_error = abap_true.
+                ENDIF.
+                IF l_rev_error IS INITIAL.
+
+                  l_rolls_int = lw_mod_rows-roll_from.
+
+                  READ TABLE i_print_rolls TRANSPORTING NO FIELDS
+                                      WITH KEY
+                                  rolls = l_rolls_int
+                                  BINARY SEARCH.
+*  If the Rolls are not found then it is not printed, prepare error message
+*  to add error message log and set the error flag l_error.
+                  IF sy-subrc NE 0.
+                    SHIFT l_rolls_int LEFT DELETING LEADING  c_zero.
+                    CONCATENATE 'Review Level'(014) lw_mod_rows-rev_level
+                                   '; Roll No.'(028) l_rolls_int
+                    'is not printed'(029) INTO l_message SEPARATED BY space.
+                    l_error = abap_true.
+*  If Rolls entered in Roll_from field are printed then check if Roll_from
+*  value is greater than value in the Roll_to field, if it is then prepare
+*  error message, set the error flag & clear the review rolls and roll numbers
+                  ELSE.
+
+                    IF lw_mod_rows-roll_to IS NOT INITIAL.
+                      l_rolls_int = lw_mod_rows-roll_to.
+                      READ TABLE i_print_rolls TRANSPORTING NO FIELDS
+                                      WITH KEY
+                                  rolls = l_rolls_int
+                                  BINARY SEARCH.
+                      IF sy-subrc NE 0.
+                        SHIFT l_rolls_int LEFT DELETING LEADING c_zero.
+                        CONCATENATE 'Review Level'(014) lw_mod_rows-rev_level
+                                       '; Roll No.'(028) l_rolls_int
+                        'is not printed'(029) INTO l_message SEPARATED BY space.
+                        l_error = abap_true.
+                        lw_good-fieldname = c_roll_to.
+                      ENDIF.
+                      IF lw_good-value GT lw_mod_rows-roll_to.
+                        l_message =  'Roll To Should always be >= Roll From'(030).
+                        l_error = abap_true.
+                        CLEAR: <lfs_output>-rev_rolls,
+                               <lfs_output>-roll_no_ltext.
+                      ENDIF.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+*  If the Error flag is set in the above validations then add respective
+*  row id, fieldname, review level, roll from, roll to and message to Error log
+*  As the error triggers in Roll_from cell then the value is getting replaced
+*  with previous value so updating the Roll_from value with value of lw_good.
+                IF l_error = abap_true.
+                  lw_error_log-row_id   = lw_good-row_id.
+                  lw_error_log-fname   = lw_good-fieldname.
+                  lw_error_log-rev_level = lw_mod_rows-rev_level.
+                  lw_error_log-roll_from = lw_mod_rows-roll_from.
+                  lw_error_log-roll_to = lw_mod_rows-roll_to.
+                  lw_error_log-message  = l_message.
+                  APPEND lw_error_log TO li_err_log.
+                  <lfs_output>-roll_from = lw_good-value.
+                ENDIF.
+*  If the change is done in Roll_To, then check whether the rolls are present
+*  in the table i_print_rolls( which has data fetched from ZGSCM_PRINT_LOG table).
+              ELSEIF lw_good-fieldname = c_roll_to AND
+                lw_mod_rows-roll_to IS NOT INITIAL .
+*  Check if the review level is not empty.
+                IF lw_mod_rows-rev_level IS INITIAL.
+                  l_message = 'Please Enter Review level'(031).
+                  lw_error_log-row_id   = lw_good-row_id.
+                  lw_error_log-fname   = c_rev_lev.
+                  lw_error_log-rev_level = lw_mod_rows-rev_level.
+                  lw_error_log-roll_from = lw_mod_rows-roll_from.
+                  lw_error_log-roll_to = lw_mod_rows-roll_to.
+                  lw_error_log-message  = l_message.
+                  APPEND lw_error_log TO li_err_log.
+                  CLEAR l_message.
+                  l_rev_error = abap_true.
+                ENDIF.
+                IF  l_rev_error IS INITIAL.
+                  l_rolls_int = lw_mod_rows-roll_to.
+*
+                  READ TABLE i_print_rolls TRANSPORTING NO FIELDS
+                                WITH   KEY rolls = l_rolls_int
+                                BINARY SEARCH.
+*  If the Rolls are not found then it is not printed, prepare error message
+*  to add error message log and set the error flag l_error.
+                  IF sy-subrc NE 0.
+                    SHIFT l_rolls_int LEFT DELETING LEADING  c_zero.
+
+                    CONCATENATE 'Review Level'(014) lw_mod_rows-rev_level
+                                   '; Roll No.'(028) l_rolls_int
+                    'is not printed'(029) INTO l_message SEPARATED BY space.
+                    l_error = abap_true.
+*  If Rolls entered in Roll_to field are printed then check if Roll_from
+*  value is greater than value in the Roll_to field, if it is then prepare
+*  error message, set the error flag & clear the review rolls and roll numbers
+                  ELSE.
+                    l_rolls_int = lw_mod_rows-roll_from.
+                    READ TABLE i_print_rolls TRANSPORTING NO FIELDS
+                                    WITH KEY
+                                rolls = l_rolls_int
+                                BINARY SEARCH.
+                    IF sy-subrc NE 0.
+                      SHIFT l_rolls_int LEFT DELETING LEADING  c_zero.
+                      CONCATENATE 'Review Level'(014) lw_mod_rows-rev_level
+                                     '; Roll No.'(028) l_rolls_int
+                      'is not printed'(029) INTO l_message SEPARATED BY space.
+                      l_error = abap_true.
+                      lw_good-fieldname = c_roll_from.
+                    ENDIF.
+                    IF lw_mod_rows-roll_from IS NOT INITIAL.
+                      IF lw_mod_rows-roll_from  GT lw_good-value.
+                        l_message =  'Roll To Should always be >= Roll From'(030).
+                        l_error = abap_true.
+                        CLEAR: <lfs_output>-rev_rolls,
+                             <lfs_output>-roll_no_ltext.
+                      ENDIF.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+*  If the Error flag is set in the above validations for Roll_to then add
+*  respective row id, fieldname, review level, roll from, roll to and message to
+*  Error log. As the error triggers in Roll_to cell then the value is getting
+*  replaced with previous value so current value of lw_good is passed to Roll_to.
+                IF l_error = abap_true.
+                  lw_error_log-row_id   = lw_good-row_id.
+                  lw_error_log-fname   = lw_good-fieldname.
+                  lw_error_log-rev_level = lw_mod_rows-rev_level.
+                  lw_error_log-roll_from = lw_mod_rows-roll_from.
+                  lw_error_log-roll_to = lw_mod_rows-roll_to.
+                  lw_error_log-message  = l_message.
+                  APPEND lw_error_log TO li_err_log.
+                  <lfs_output>-roll_to = lw_good-value.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+* check review level error flag is set then pass to the l_error
+* clear the roll from and roll to if there is no review level.
+            IF l_rev_error IS NOT INITIAL.
+              l_error = abap_true.
+              CLEAR: <lfs_output>-roll_from,
+               <lfs_output>-roll_to.
+              CLEAR: l_rev_error.
+            ENDIF.
+
+*  The below validation will be performed only if rolls are actually printed and
+*  Roll from is less than or equal to Roll to field value i.e., l_error is not set
+            IF l_error IS INITIAL.
+*  Validation for duplicate entries of Roll No's, check if values exist in the
+*  Review level, Roll form and Roll to fields
+              IF lw_mod_rows-rev_level IS NOT INITIAL AND
+                  lw_mod_rows-roll_from IS NOT INITIAL AND
+                  lw_mod_rows-roll_to IS NOT INITIAL.
+
+*  As we are checking for the index to check duplicate from the i_output table if the sort
+*  is used the exact index is not found and causes inconsisent data, so binary search is not used.
+*  Check of the value already exists in previous entries of the output table
+                READ TABLE i_output INTO lw_output WITH KEY
+                                                    rev_level = lw_mod_rows-rev_level
+                                                    roll_from = lw_mod_rows-roll_from
+                                                    roll_to   = lw_mod_rows-roll_to. "#EC CI_STDSEQ
+
+*  If value exists then it is a duplicate row, so error message to be triggered
+                IF sy-subrc EQ 0.
+
+                  l_index = sy-tabix.
+*  The duplicate value shouldn't check with the same row that is being modified
+*  so the below condition restricts to check duplicate entries with the current row
+                  IF l_index NE lw_good-row_id .
+*  once the error message occurs the values in the error cells are getting replcaed
+*  with the previous values, so updating the relevant columns to update with current
+*  values
+                    READ TABLE i_output ASSIGNING <lfs_chg_output> INDEX lw_good-row_id.
+
+                    IF sy-subrc EQ 0.
+
+                      <lfs_chg_output>-rev_level = lw_mod_rows-rev_level.
+                      <lfs_chg_output>-roll_from = lw_mod_rows-roll_from.
+                      <lfs_chg_output>-roll_to =    lw_mod_rows-roll_to.
+
+                    ENDIF.
+
+
+                    CLEAR: l_message,
+                           l_message1,
+                           l_roll_frm,
+                           l_roll_to.
+*   If the duplicate entries are found then based on the review status of those Rolls
+*   respective messages are triggered.
+                    l_error = abap_true. " set the error flag
+                    l_roll_frm = lw_output-roll_from.
+                    l_roll_to = lw_output-roll_to.
+                    SHIFT l_roll_frm LEFT DELETING LEADING c_zero.
+                    SHIFT l_roll_to LEFT DELETING LEADING c_zero.
+*  If duplicate entry of Rolls found is in IN PROGRESS Status then below message is triggered
+                    IF lw_output-status EQ c_in_prg .
+
+                      CONCATENATE 'Selected Rolls'(033)
+                                  l_roll_frm 'to'(034) l_roll_to
+                                   'are in review'(035)
+                                    INTO l_message SEPARATED BY space.
+*  If duplicate entry of Rolls found is in COMPLETED Status then below message is triggered
+                    ELSEIF lw_output-status EQ c_comp.
+
+                      CONCATENATE 'Review Level'(014) lw_output-rev_level
+                                   'has already been performed for'(036)
+                                    INTO l_message SEPARATED BY space.
+* Begin of comment for ALM43408 TIR1019 DR1K9A0E8T MOD01
+*                      CONCATENATE  l_roll_frm 'to'(034) l_roll_to 'Rolls'(037)
+*                                             INTO l_message1 SEPARATED BY space.
+* End of comment for ALM43408 TIR1019 DR1K9A0E8T MOD01
+* Begin of changes for ALM43408 TIR1019 DR1K9A0E8T MOD01
+*  Update message in case of Rolls status is Completed
+                      l_message1 = text-045.
+* End of changes for ALM43408 TIR1019 DR1K9A0E8T MOD01
+*  If duplicate entry of Rolls found is in NOT STARTED Status then below message is triggered
+                    ELSEIF lw_output-status EQ c_not_strt.
+
+                      CONCATENATE 'Selected Rolls'(033)
+                                  l_roll_frm 'to'(034) l_roll_to
+                                 'already exists'(038)
+                                  INTO l_message SEPARATED BY space.
+
+                    ENDIF.
+                  ENDIF.
+*  If for particular combination of Review level, Roll from and Roll to values
+*  the entry is not found then we should also check whether the rolls in
+*  between 'Roll from' and 'Roll to' values of any previous entries exists
+*  If there are any such rolls exists then unique error message is displayed
+                ELSE.
+*  I_ROLLS_RANGE contains all the individual roll no's that exists in the current
+*  output table, check if the Roll_from value is already exists in the table
+*  li_rolls_range doesnot consists of the current roll entries as the validation
+*  must be performed by checking all other entries
+                  li_rolls_range[] = i_rolls_range[].
+
+                  SORT li_rolls_range BY rev_level rolls. "#EC CI_SORTLOOP
+
+                  READ TABLE li_rolls_range TRANSPORTING NO FIELDS WITH KEY
+                                          rev_level = lw_mod_rows-rev_level
+                                          rolls     = lw_mod_rows-roll_from
+                                          BINARY SEARCH.
+                  IF sy-subrc NE 0.
+*  If the Roll_from value is not found in the li_rolls_range then check if Roll_to
+*  value exists in the table.
+                    READ TABLE li_rolls_range TRANSPORTING NO FIELDS WITH KEY
+                                          rev_level = lw_mod_rows-rev_level
+                                          rolls     =  lw_mod_rows-roll_to
+                                          BINARY SEARCH.
+
+
+                    IF sy-subrc EQ 0.
+*  If the value exists in the table for Roll_to then error flag is set and once
+*  the error message occurs the values in the error cells are getting replcaed
+*  with the previous values, so updating the relevant columns to update with
+*  current values
+                      READ TABLE i_output ASSIGNING <lfs_output> INDEX lw_good-row_id.
+                      IF sy-subrc EQ 0.
+                        <lfs_output>-rev_level = lw_mod_rows-rev_level.
+                        <lfs_output>-roll_to   = lw_mod_rows-roll_to.
+                        <lfs_output>-roll_from = lw_mod_rows-roll_from.
+                      ENDIF.
+                      l_error = abap_true.
+                    ENDIF.
+
+                  ELSE.
+*  If the value exists in the table for Roll_from then error flag is set and once
+*  the error message occurs the values in the error cells are getting replcaed
+*  with the previous values, so updating the relevant columns to update with
+*  current values
+                    READ TABLE i_output ASSIGNING <lfs_output> INDEX lw_good-row_id.
+                    IF sy-subrc EQ 0.
+                      <lfs_output>-rev_level = lw_mod_rows-rev_level.
+                      <lfs_output>-roll_from = lw_mod_rows-roll_from.
+                      <lfs_output>-roll_to   = lw_mod_rows-roll_to.
+                    ENDIF.
+
+                    l_error = abap_true.
+
+                  ENDIF.
+*  As the error is triggered for the rolls in between Roll from and Roll to
+*  the error should be highlighted for both ROLL_FROM and ROLL_TO values
+                  IF l_error  IS NOT INITIAL.
+                    IF lw_good-fieldname     = c_roll_from .
+                      l_fname = c_roll_to.
+                    ELSEIF lw_good-fieldname = c_roll_to .
+                      l_fname = c_roll_from.
+                    ELSEIF lw_good-fieldname = c_rev_lev .
+                      l_fname = c_rev_lev.
+                    ENDIF.
+*  Error message is passed and added to the li_err_log,
+*  both fields Roll from and Roll to be highlighted so adding
+*  message into error log for both fields Roll_from and Roll_to
+                    clear l_message1.
+                    l_message  =  'Rolls in between Roll From & Roll To are'(039).
+                    l_message1 =  'being reviewed or completed'(044).
+                    lw_error_log-row_id     = lw_good-row_id.
+                    lw_error_log-fname      = l_fname.
+                    lw_error_log-rev_level  = lw_mod_rows-rev_level.
+                    lw_error_log-roll_from  = lw_mod_rows-roll_from.
+                    lw_error_log-roll_to    = lw_mod_rows-roll_to.
+                    lw_error_log-message    = l_message.
+                    lw_error_log-message1   = l_message1.
+                    APPEND lw_error_log TO li_err_log.
+                  ENDIF.
+
+                ENDIF.
+*  If the Error flag is set then add the message into error log
+                IF  l_error = abap_true.
+                  lw_error_log-row_id     = lw_good-row_id.
+                  lw_error_log-fname      = lw_good-fieldname.
+                  lw_error_log-rev_level  = lw_mod_rows-rev_level.
+                  lw_error_log-roll_from  = lw_mod_rows-roll_from.
+                  lw_error_log-roll_to    = lw_mod_rows-roll_to.
+                  lw_error_log-message    = l_message.
+                  IF l_message1 IS NOT INITIAL .
+                    lw_error_log-message1  = l_message1.
+                  ENDIF.
+                  APPEND lw_error_log TO li_err_log.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+
+*  Add entries to I_ERROR_LOG if there are any errors found in this method
+      IF l_error IS NOT INITIAL.
+
+        CLEAR lw_error_log.
+
+        LOOP AT li_err_log  INTO lw_error_log.
+*  Add the error message by calling the method add_protocol_entry
+*  by exporting the message class as '/LMC/CTM_PRTORD', message number
+*  & type, column, row number and message to relevant parameters
+          ir_data_changed->add_protocol_entry(
+        EXPORTING
+            i_msgid     = c_mesg_class
+            i_msgno     = 100
+            i_msgty     = c_e
+            i_msgv1     = lw_error_log-message
+            i_msgv2     = lw_error_log-message1
+            i_fieldname = lw_error_log-fname
+            i_row_id    = lw_error_log-row_id ) .
+*  set the global error variable g_error_in_data
+          g_error_in_data = abap_true.
+
+          APPEND lw_error_log TO i_error_log.
+
+          CLEAR lw_error_log.
+
+        ENDLOOP.
+        o_grid->refresh_table_display( ).
+      ENDIF.
+      CLEAR l_error.
+    ELSE.
+*  Calculate the individual rolls for all the existing
+*  entries in the get_rolls_range method
+      CALL METHOD me->get_rolls_range( ).
+    ENDIF.
+
+  ENDMETHOD.
+  METHOD modify_cell_values.
+
+    DATA: lw_stable TYPE lvc_s_stbl,
+          lw_good   TYPE lvc_s_modi.
+
+    DATA: l_ins_row  TYPE lvc_s_moce.
+
+*  If there is no consistency occurs then the below logic is executed
+    IF g_error_in_data IS INITIAL.
+*   When the Row is inserted then the row should be updated with
+*   default values for the below mentioned fields
+      IF ir_data_changed->mt_inserted_rows IS NOT INITIAL.
+
+        READ TABLE  ir_data_changed->mt_inserted_rows INTO l_ins_row INDEX 1.
+
+        IF sy-subrc EQ 0.
+
+*   Print order is filled in PRTORDER field
+          ir_data_changed->modify_cell(
+           EXPORTING i_row_id = l_ins_row-row_id
+                     i_fieldname = c_prtorder
+                     i_value = g_prt_order ).
+*   STATUS field must be updated with NOT STARTED
+          ir_data_changed->modify_cell(
+            EXPORTING i_row_id = l_ins_row-row_id
+                      i_fieldname = c_status
+                       i_value = c_not_strt ).
+*   REV_USER field must be updated with current Username
+          ir_data_changed->modify_cell(
+            EXPORTING i_row_id = l_ins_row-row_id
+                      i_fieldname = c_rev_user
+                      i_value = sy-uname ).
+*   ROLL_NOS field must be updated with ICON_DOCUMENT
+          ir_data_changed->modify_cell(
+            EXPORTING i_row_id = l_ins_row-row_id
+                      i_fieldname = c_roll_nos
+                      i_value = icon_document ).
+*   LTEXT_ICON field must be updated with ICON_CREATE_TEXT
+          ir_data_changed->modify_cell(
+            EXPORTING i_row_id = l_ins_row-row_id
+                      i_fieldname = c_ltext
+                      i_value = icon_create_text ).
+
+        ENDIF.
+
+      ENDIF.
+*  Calculation of rolls shouldn't be performed while insert row operation
+      IF ir_data_changed->mt_inserted_rows IS INITIAL
+         AND ir_data_changed->mt_good_cells IS NOT INITIAL.
+* Check if there is any change in the value of fields 'ROLL_FROM' or 'ROLL_TO'
+        LOOP AT ir_data_changed->mt_good_cells INTO lw_good.
+
+          IF lw_good-fieldname = c_roll_from OR
+               lw_good-fieldname =   c_roll_to.
+*  CALC_ROLLS method calcualte the rolls based on Roll_from and Roll_to
+*  values which is saved as long text and Total review rolls are caluclated
+            CALL METHOD me->calc_rolls(
+              EXPORTING
+                i_good          = lw_good
+                ir_data_changed = ir_data_changed ).
+
+          ENDIF.
+        ENDLOOP.
+*     To place cursor in the current cell
+        lw_stable = abap_true.
+        o_grid->refresh_table_display(
+        EXPORTING is_stable = lw_stable ).
+      ENDIF.
+    ELSE.
+      IF ir_data_changed->mt_inserted_rows IS NOT INITIAL.
+        MESSAGE 'Please clear inconsistencies in the data to proceed'(032) TYPE 'I'.
+      ENDIF.
+    ENDIF.
+    DELETE i_output WHERE status IS INITIAL.             "#EC CI_STDSEQ
+    IF sy-subrc EQ 0.
+      o_grid->refresh_table_display( ).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD handle_double_click.
+
+    TYPES :BEGIN OF lty_dis_longtext,
+             tdline TYPE tdline,
+           END OF lty_dis_longtext.
+
+    DATA: li_longtext TYPE TABLE OF lty_dis_longtext,
+          li_tline    TYPE tline_t.
+
+    DATA: lw_outtab   TYPE zgscm_review_labels,
+          lw_lines    TYPE tline,
+          lw_header   TYPE thead,
+          lw_longtext TYPE lty_dis_longtext.
+
+    DATA: l_name    TYPE thead-tdname,
+          l_object  TYPE thead-tdobject,
+          l_index   TYPE sy-tabix,
+          l_display TYPE char01.
+
+    FIELD-SYMBOLS: <ls_outtab>  TYPE zgscm_review_labels.
+
+*  On double click of the cell the method HANDLE_DOUBLE_CLICK triggers
+*  the event double_click, the logic is triggered in the method
+*  for only fields 'ROLL_NOS' and 'LTEXT_ICON'.
+    IF e_column-fieldname EQ c_roll_nos.
+*  If the double_click event id triggered for the ROLL_NOS field
+*  then read data from the table i_output for particular row_id
+      READ TABLE i_output INTO lw_outtab INDEX es_row_no-row_id.
+
+      IF sy-subrc EQ 0.
+*  If data found, then pass the text object and prepare text name
+        l_object = c_lsrd_ctrr.
+
+        l_index = sy-tabix.
+*  Roll Nos Text name should be unique with combination of print order,
+*  Review level, Roll from and Roll to values passed to l_name
+        CONCATENATE g_prt_order
+                lw_outtab-rev_level
+                 lw_outtab-roll_from
+                 lw_outtab-roll_to INTO l_name.
+*  Read the text by calling the FM READ_TEXT with the text name and object
+*  and import the long text in the li_tline table
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            id                      = c_id
+            language                = c_e
+            name                    = l_name
+            object                  = l_object
+          TABLES
+            lines                   = li_tline
+          EXCEPTIONS
+            id                      = 1
+            language                = 2
+            name                    = 3
+            not_found               = 4
+            object                  = 5
+            reference_check         = 6
+            wrong_access_to_archive = 7
+            OTHERS                  = 8.
+
+        IF sy-subrc EQ 0.
+*  If the text is found then append the same to the field ROLL_NO_LTEXT
+*  of the i_output table
+          IF lw_outtab-roll_no_ltext IS INITIAL .
+            LOOP AT li_tline INTO  lw_lines.
+              APPEND  lw_lines TO lw_outtab-roll_no_ltext.
+              MODIFY i_output FROM lw_outtab INDEX l_index.
+            ENDLOOP.
+          ENDIF.
+          REFRESH li_tline.
+        ENDIF.
+
+
+*  Call FM  /LSRD/CONTROL_EDIT to display the long text that is
+*  read above by calling the FM READ_TEXT.
+
+        CALL FUNCTION '/LSRD/CONTROL_EDIT'
+          EXPORTING
+            titel            = TEXT-016
+            langu            = c_e
+            iv_display       = abap_true
+          TABLES
+            textlines        = li_longtext[]
+            textlines_format = lw_outtab-roll_no_ltext[]
+          EXCEPTIONS
+            user_cancelled   = 1
+            OTHERS           = 2.
+        IF sy-subrc EQ 0.
+          CLEAR lw_outtab.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+    CLEAR: l_index,
+           l_name.
+*  If the double_click event id triggered for the LTEXT_ICON field
+*  then read data from the table i_output for particular row_id
+    IF e_column-fieldname EQ c_ltext .
+
+      READ TABLE i_output INTO lw_outtab INDEX es_row_no-row_id.
+
+      IF sy-subrc EQ 0.
+
+        l_index = sy-tabix.
+*   If data found, then pass the text object and prepare text name
+        l_object = c_lsrd_ctrr.
+* Comments Text name should be unique with combination of 'EN',
+* print order, Review level, Roll from and Roll to values passed
+* to l_name
+        CONCATENATE    c_en
+                      lw_outtab-prtorder
+                      lw_outtab-rev_level
+                      lw_outtab-roll_from
+                      lw_outtab-roll_to   INTO  l_name .
+*  Read the text by calling the FM READ_TEXT with the text name and object
+*  and import the long text in the li_tline table
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+            id                      = c_id
+            language                = c_e
+            name                    = l_name
+            object                  = l_object
+          TABLES
+            lines                   = li_tline
+          EXCEPTIONS
+            id                      = 1
+            language                = 2
+            name                    = 3
+            not_found               = 4
+            object                  = 5
+            reference_check         = 6
+            wrong_access_to_archive = 7
+            OTHERS                  = 8.
+*  If text is found then read the long text append the same to the field
+*  LTEXT of the i_output table
+        IF sy-subrc = 0.
+          CLEAR lw_outtab-ltext.
+          LOOP AT li_tline INTO  lw_lines.
+            APPEND  lw_lines TO lw_outtab-ltext.
+            MODIFY i_output FROM lw_outtab INDEX l_index.
+          ENDLOOP.
+          REFRESH li_tline.
+        ENDIF.
+*  If the status is completed then the long text is displayed in
+*  DISPLAY only mode
+        IF lw_outtab-status EQ c_comp.
+          l_display    = abap_true.
+        ENDIF.
+*  Call FM  /LSRD/CONTROL_EDIT to display the long text that is
+*  read above by calling the FM READ_TEXT and any changes done
+*  to the text done in the popup will get stored in li_longtext
+        CALL FUNCTION '/LSRD/CONTROL_EDIT'
+          EXPORTING
+            titel            = TEXT-021
+            langu            = c_e
+            iv_display       = l_display
+          TABLES
+            textlines        = li_longtext[]
+            textlines_format = lw_outtab-ltext[]
+          EXCEPTIONS
+            user_cancelled   = 1
+            OTHERS           = 2.
+
+*   If User clicked on Cancel button on the longtext popup then data is not saved
+        IF sy-subrc = 0.
+
+*  The long text is updated in the i_output table, if i_output table is
+*  sorted based on Review level, Roll from and Roll to then entries also
+*  get sorted in the ALV gso binary search is not used in the below Read.
+          READ TABLE i_output ASSIGNING <ls_outtab> WITH KEY
+                                                 rev_level = lw_outtab-rev_level
+                                                 roll_from = lw_outtab-roll_from
+                                                 roll_to = lw_outtab-roll_to. "#EC CI_STDSEQ
+          IF sy-subrc EQ 0.
+
+            CLEAR: <ls_outtab>-ltext,
+                    lw_lines.
+*  If li_long_text contains any changes then append the same to the LTEXT field
+*  of i_output table.
+            IF li_longtext IS NOT INITIAL.
+              LOOP AT li_longtext INTO lw_longtext.
+                lw_lines-tdline = lw_longtext-tdline.
+                lw_lines-tdformat = c_asterisk.
+                APPEND lw_lines TO <ls_outtab>-ltext.
+              ENDLOOP.
+            ELSE.
+              lw_lines-tdformat = c_asterisk.
+              APPEND lw_lines TO <ls_outtab>-ltext.
+            ENDIF.
+
+*  Call the function to initialize text work areas
+            CALL FUNCTION 'INIT_TEXT'
+              EXPORTING
+                id       = c_id
+                language = c_e
+                name     = l_name
+                object   = l_object
+              IMPORTING
+                header   = lw_header
+              TABLES
+                lines    = li_tline[]
+              EXCEPTIONS
+                id       = 1
+                language = 2
+                name     = 3
+                object   = 4
+                OTHERS   = 5.
+*  If no error is found while initializing then save the text
+*  by calling the FM SAVE_TEXT
+            IF sy-subrc EQ 0.
+              CALL FUNCTION 'SAVE_TEXT'
+                EXPORTING
+                  header          = lw_header
+                  insert          = c_checked
+                  savemode_direct = c_checked
+                TABLES
+                  lines           = <ls_outtab>-ltext
+                EXCEPTIONS
+                  id              = 1
+                  language        = 2
+                  name            = 3
+                  object          = 4
+                  OTHERS          = 5.
+              IF sy-subrc <> 0.
+                CLEAR li_tline.
+              ENDIF.
+            ENDIF.
+
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD check_error_log.
+
+    DATA: lw_data     TYPE  zgscm_review_labels,
+          lw_error    TYPE ty_error_log,
+          lw_mod_rows TYPE zgscm_review_labels,
+          lw_good     TYPE lvc_s_modi,
+          l_column    TYPE  lvc_fname,
+          l_index     TYPE sy-tabix,
+          l_lines     TYPE i.
+    FIELD-SYMBOLS: <ls_chg_out> TYPE zgscm_review_labels.
+    FIELD-SYMBOLS: <lfs_mod_rows> TYPE ty_tt_output,
+                   <lfs_out>      TYPE zgscm_review_labels.
+
+*  As when the row is deleted the initial reference to
+*  row id is lost, so new column delta_row_id is created
+*  in which original row id will be retained even if
+*  particular row is deleted.
+    l_lines = lines( i_output ).
+    IF  l_lines GT 0.
+      READ TABLE i_output ASSIGNING <lfs_out> INDEX l_lines.
+      IF  sy-subrc EQ 0 AND <lfs_out>-delta_row_id IS  INITIAL.
+        <lfs_out>-delta_row_id = l_lines.
+      ENDIF.
+    ENDIF.
+*  Before updating the alv grid values, the data is checked
+*  for consistency with the current values against the error
+*  log entries, i_chg_out is updated with current values of
+*  the ALV grid
+
+    i_chg_out = i_output.
+*  ir_data_changed->mp_mod_rows contians the current modified row
+*  with current values.
+    ASSIGN ir_data_changed->mp_mod_rows->* TO <lfs_mod_rows>.
+    READ TABLE <lfs_mod_rows> INTO lw_mod_rows INDEX 1.
+    IF sy-subrc EQ 0.
+*   If the good cells contain either 'Rev_level' or 'Roll_from'
+*   or 'Roll_to' fields then update the same in the i_chg_out
+      READ TABLE ir_data_changed->mt_good_cells INTO lw_good INDEX 1 .
+      IF sy-subrc EQ 0.
+        IF lw_good-fieldname = c_rev_lev
+        OR lw_good-fieldname = c_roll_from
+        OR lw_good-fieldname = c_roll_to.
+          READ TABLE i_chg_out ASSIGNING <ls_chg_out> INDEX lw_good-row_id.
+          IF sy-subrc EQ 0.
+            <ls_chg_out>-rev_level = lw_mod_rows-rev_level.
+            <ls_chg_out>-roll_from = lw_mod_rows-roll_from.
+            <ls_chg_out>-roll_to = lw_mod_rows-roll_to.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+*   I_ERROR_LOG table contains all error log entries that are triggered,
+*   when inconsistent values entered in the ALV grid. When the user
+*   tries to perform any action on the review screen with inconsistent
+*   values, then Error log should be checked and display appropriate
+*   error message
+    IF i_error_log IS NOT INITIAL.
+*   Duplicates are removed if there are any, by comparing the fields
+*   to avoid duplicate message in the Error log on the screen
+      SORT i_error_log BY row_id
+                          fname
+                          rev_level
+                          roll_from
+                          roll_to
+                          message
+                          message1.
+
+      DELETE ADJACENT DUPLICATES FROM i_error_log
+                                        COMPARING
+                                          row_id
+                                          fname
+                                          rev_level
+                                          roll_from
+                                          roll_to
+                                          message
+                                          message1.
+
+      SORT  i_chg_out BY rev_level
+                          roll_from
+                          roll_to
+                          delta_row_id.
+*   Loop the i_error_log table and check if inconsistency still
+*   exists in the output table, if exists then error message is
+*   displayed and error flag 'g_error_in_data' is set.
+      LOOP AT i_error_log INTO lw_error.
+*   Check if the inconsistent value present in i_error_log still
+*   exists in the table i_chg_out
+        READ TABLE i_chg_out INTO lw_data
+                   WITH KEY rev_level = lw_error-rev_level
+                            roll_from = lw_error-roll_from
+                            roll_to = lw_error-roll_to
+                            delta_row_id = lw_error-row_id
+                            BINARY SEARCH.
+
+        IF sy-subrc EQ 0.
+*  Check if review level is entered or not as the review_level
+*  is empty dont add the message to log.
+          IF lw_data-rev_level IS NOT INITIAL.
+
+
+            l_index = lw_data-delta_row_id.
+
+            l_column = lw_error-fname.
+*   If the inconsistent values occurs in the output table
+*   then add the error message by calling the method
+*   add_protocol_entry by exporting the message class as
+*   '/LMC/CTM_PRTORD', message number & type, column,
+*   row number and message to relevant parameters
+            ir_data_changed->add_protocol_entry(
+              EXPORTING
+                  i_msgid = c_mesg_class
+                  i_msgno = 100
+                  i_msgty = c_e
+                  i_msgv1 = lw_error-message
+                  i_msgv2 = lw_error-message1
+                  i_fieldname = l_column
+                  i_row_id = l_index ) .
+            g_error_in_data = abap_true.
+          ENDIF.
+        ENDIF.
+        CLEAR: lw_error,
+               l_index,
+               l_column.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD get_rolls_range.
+    DATA: li_rolls       TYPE STANDARD TABLE OF ty_rolls,
+          lw_rolls       TYPE ty_rolls,
+          lw_rolls_range TYPE ty_rolls_range,
+          lw_output      TYPE zgscm_review_labels.
+    DATA: l_rolls_per_line TYPE i,
+          l_curr_roll(6)   TYPE n,
+          l_roll_no        TYPE string.
+
+    REFRESH i_rolls_range.
+*  if user tries to enter the rolls in between Roll from and Roll to
+*  of the existing entries then it is difficult to identify the duplicates
+*  with  Roll from and Roll to alone so storing the individual rolls in the
+*  table with the review level, Review status and user .
+    LOOP AT  i_output INTO lw_output.
+
+      IF lw_output-roll_from IS NOT INITIAL
+         AND lw_output-roll_to IS NOT INITIAL.
+
+        CLEAR: l_rolls_per_line,
+               l_curr_roll,
+               l_roll_no.
+
+* Calculate total number of Rolls in between Roll from and Roll to
+        l_rolls_per_line = lw_output-roll_to - lw_output-roll_from + 1.
+
+        l_curr_roll = lw_output-roll_from.
+
+* Calculates the rolls exists in between Roll form and Roll to
+        IF l_curr_roll IS NOT INITIAL.
+          DO l_rolls_per_line TIMES.
+            CONCATENATE l_roll_no l_curr_roll  INTO l_roll_no SEPARATED BY c_comma.
+            l_curr_roll = l_curr_roll + 1.
+            SHIFT l_roll_no LEFT DELETING LEADING c_comma.
+          ENDDO.
+        ENDIF.
+
+        REFRESH: li_rolls.
+
+        SPLIT l_roll_no AT c_comma INTO TABLE li_rolls.
+*  li_rolls contains all individual rolls, update review level,
+*  Review status and user
+        LOOP AT li_rolls INTO lw_rolls.
+
+          lw_rolls_range-rev_level = lw_output-rev_level.
+          lw_rolls_range-rolls = lw_rolls-rolls.
+          lw_rolls_range-status = lw_output-status.
+          lw_rolls_range-user = lw_output-rev_user.
+* I_ROLLS_RANGE is used to check whether duplicates exists
+* in between Roll from and Roll to
+          APPEND lw_rolls_range TO i_rolls_range.
+          CLEAR lw_rolls.
+
+        ENDLOOP.
+
+      ENDIF.
+      CLEAR lw_output.
+    ENDLOOP.
+
+
+  ENDMETHOD.
+ENDCLASS.
